@@ -33,6 +33,8 @@ const UserDashboard = () => {
     category: ''
   });
   const [feedback, setFeedback] = useState({ rating: 5, comment: '' });
+  const [error, setError] = useState(null);
+  const [createError, setCreateError] = useState(null);
   const { API_URL, user } = useAuth();
 
   useEffect(() => {
@@ -48,27 +50,52 @@ const UserDashboard = () => {
       // Filter tokens to show only those created by the current user
       setTokens(tokensRes.data.filter(t => t.createdBy?._id === user._id));
       setDepartments(deptsRes.data);
+      setError(null); // Clear any previous errors
     } catch (error) {
       console.error('Error fetching data:', error);
+      setError('Failed to load data. Please refresh the page.');
     }
   };
 
   const createToken = async (e) => {
     e.preventDefault();
+    setCreateError(null);
+    
     try {
-      // Ensure department and category IDs are correctly sent if they are objects
+      // Validate that department is selected
+      if (!formData.department) {
+        setCreateError('Please select a department');
+        return;
+      }
+      
+      // Validate title and description
+      if (!formData.title || formData.title.trim().length < 3) {
+        setCreateError('Title must be at least 3 characters');
+        return;
+      }
+      
+      if (!formData.description || formData.description.trim().length < 10) {
+        setCreateError('Description must be at least 10 characters');
+        return;
+      }
+      
       const payload = {
-        ...formData,
-        department: formData.department, // Assuming formData.department is the ID
-        category: formData.category,     // Assuming formData.category is the name or ID
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        priority: formData.priority,
+        department: formData.department,
+        category: formData.category || undefined,
       };
+      
       await axios.post(`${API_URL}/tokens`, payload);
       setFormData({ title: '', description: '', priority: 'medium', department: '', category: '' });
       setShowCreateForm(false);
+      setCreateError(null);
       fetchData();
     } catch (error) {
       console.error('Error creating token:', error);
-      alert('Failed to create token');
+      const errorMessage = error.response?.data?.message || 'Failed to create token. Please try again.';
+      setCreateError(errorMessage);
     }
   };
 
@@ -94,10 +121,31 @@ const UserDashboard = () => {
 
   const selectedDepartment = departments.find(d => d._id === formData.department);
   const availableCategories = selectedDepartment?.categories || [];
+  
+  useEffect(() => {
+    if (error) {
+      console.error('Dashboard error:', error);
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+  
+  useEffect(() => {
+    if (createError) {
+      const timer = setTimeout(() => setCreateError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [createError]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900">
       <div className="container mx-auto px-4 py-8">
+        {/* Error Message */}
+        {error && (
+          <div className="mb-4 bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-400">
+            {error}
+          </div>
+        )}
         {/* 3D Header */}
         <div className="mb-8 h-64 rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-gradient-to-br from-[#ED1B2F]/20 to-[#455185]/20 backdrop-blur-xl">
           <Canvas camera={{ position: [0, 0, 5] }}>
@@ -130,6 +178,11 @@ const UserDashboard = () => {
         {showCreateForm && (
           <div className="mb-8 bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20">
             <h3 className="text-2xl font-bold text-white mb-6">Create Support Ticket</h3>
+            {createError && (
+              <div className="mb-4 bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-400">
+                {createError}
+              </div>
+            )}
             <form onSubmit={createToken} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Title */}
@@ -177,21 +230,22 @@ const UserDashboard = () => {
                 </div>
 
                 {/* Category */}
-                <div>
-                  <label className="block text-white/80 mb-2 font-medium">Category *</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#455185] focus:border-transparent transition-all disabled:opacity-50"
-                    disabled={!formData.department}
-                    required
-                  >
-                    <option value="" className="text-gray-900">Select Category</option>
-                    {availableCategories.map(cat => (
-                      <option key={cat} value={cat} className="text-gray-900">{cat}</option>
-                    ))}
-                  </select>
-                </div>
+                {formData.department && (
+                  <div>
+                    <label className="block text-white/80 mb-2 font-medium">Category</label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#455185] focus:border-transparent transition-all disabled:opacity-50"
+                      disabled={!formData.department}
+                    >
+                      <option value="" className="text-gray-900">Select Category</option>
+                      {availableCategories.map(cat => (
+                        <option key={cat._id || cat.name} value={cat.name} className="text-gray-900">{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Description */}

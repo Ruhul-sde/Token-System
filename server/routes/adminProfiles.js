@@ -10,7 +10,7 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const profiles = await AdminProfile.find()
       .populate('user', 'name email role department employeeCode')
-      .populate('departments', 'name description categories');
+      .populate('department', 'name description categories');
     res.json(profiles);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -20,9 +20,9 @@ router.get('/', authenticate, async (req, res) => {
 // Get admin profiles by department
 router.get('/by-department/:departmentId', authenticate, async (req, res) => {
   try {
-    const profiles = await AdminProfile.find({ departments: req.params.departmentId })
+    const profiles = await AdminProfile.find({ department: req.params.departmentId })
       .populate('user', 'name email role department employeeCode')
-      .populate('departments', 'name description categories');
+      .populate('department', 'name description categories');
     res.json(profiles);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -32,29 +32,56 @@ router.get('/by-department/:departmentId', authenticate, async (req, res) => {
 // Create admin profile (superadmin only)
 router.post('/', authenticate, authorize('superadmin'), async (req, res) => {
   try {
-    const { userId, bio, expertise, departments, phone, profileImage, employeeId, address, emergencyContact } = req.body;
+    const { name, email, password, expertise, department, categories, phone, employeeId } = req.body;
 
-    const existingProfile = await AdminProfile.findOne({ user: userId });
-    if (existingProfile) {
-      return res.status(400).json({ message: 'Profile already exists for this admin' });
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Admin with this email already exists' });
     }
 
+    if (employeeId) {
+      const existingCode = await User.findOne({ employeeCode: employeeId });
+      if (existingCode) {
+        return res.status(400).json({ message: 'Employee ID already exists' });
+      }
+    }
+
+    // Validate password
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    }
+
+    // Create user account with hashed password
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.default.hash(password, 12);
+
+    const user = new User({
+      email,
+      password: hashedPassword,
+      name,
+      employeeCode: employeeId,
+      role: 'admin',
+      department
+    });
+
+    await user.save();
+
+    // Create admin profile
     const profile = new AdminProfile({
-      user: userId,
-      bio,
+      user: user._id, // Ensure user._id is correctly assigned
       expertise,
-      departments,
+      department,
+      categories,
       phone,
-      profileImage,
-      employeeId,
-      address,
-      emergencyContact
+      employeeId
     });
 
     await profile.save();
+
     const populatedProfile = await AdminProfile.findById(profile._id)
       .populate('user', 'name email role department employeeCode')
-      .populate('departments', 'name description categories');
+      .populate('department', 'name description categories');
 
     res.status(201).json(populatedProfile);
   } catch (error) {
@@ -65,15 +92,16 @@ router.post('/', authenticate, authorize('superadmin'), async (req, res) => {
 // Update admin profile (superadmin only)
 router.patch('/:id', authenticate, authorize('superadmin'), async (req, res) => {
   try {
-    const { bio, expertise, departments, phone, profileImage, isActive, employeeId, address, emergencyContact } = req.body;
+    // Removed unused fields: bio, departments, profileImage, isActive, address, emergencyContact
+    const { expertise, phone, employeeId } = req.body;
 
     const profile = await AdminProfile.findByIdAndUpdate(
       req.params.id,
-      { bio, expertise, departments, phone, profileImage, isActive, employeeId, address, emergencyContact },
+      { expertise, phone, employeeId }, // Only update fields that are still relevant
       { new: true }
     )
       .populate('user', 'name email role department employeeCode')
-      .populate('departments', 'name description categories');
+      .populate('department', 'name description categories');
 
     res.json(profile);
   } catch (error) {

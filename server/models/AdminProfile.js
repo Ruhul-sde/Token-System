@@ -7,10 +7,6 @@ const adminProfileSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  bio: {
-    type: String,
-    default: ''
-  },
   phone: {
     type: String,
     default: ''
@@ -18,14 +14,13 @@ const adminProfileSchema = new mongoose.Schema({
   expertise: [{
     type: String
   }],
-  departments: [{
+  department: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department'
-  }],
-  profileImage: {
-    type: String,
-    default: ''
   },
+  categories: [{
+    type: String
+  }],
   employeeId: {
     type: String,
     unique: true,
@@ -35,22 +30,9 @@ const adminProfileSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  address: {
-    type: String,
-    default: ''
-  },
-  emergencyContact: {
-    name: String,
-    phone: String,
-    relation: String
-  },
   isActive: {
     type: Boolean,
     default: true
-  },
-  lastPasswordChange: {
-    type: Date,
-    default: Date.now
   },
   createdAt: {
     type: Date,

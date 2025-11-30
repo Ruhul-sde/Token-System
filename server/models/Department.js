@@ -1,6 +1,19 @@
 
 import mongoose from 'mongoose';
 
+const categorySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String
+  },
+  subCategories: [{
+    type: String
+  }]
+}, { _id: true });
+
 const departmentSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -10,9 +23,7 @@ const departmentSchema = new mongoose.Schema({
   description: {
     type: String
   },
-  categories: [{
-    type: String
-  }],
+  categories: [categorySchema],
   createdAt: {
     type: Date,
     default: Date.now
