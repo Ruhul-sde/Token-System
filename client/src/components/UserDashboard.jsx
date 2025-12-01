@@ -149,12 +149,21 @@ const UserDashboard = () => {
 
   const submitFeedback = async () => {
     try {
-      await axios.post(`${API_URL}/tokens/${selectedToken._id}/feedback`, feedback);
+      const token = localStorage.getItem('token');
+      const config = {
+        headers: { 
+          'Authorization': `Bearer ${token}` 
+        }
+      };
+      
+      await axios.post(`${API_URL}/tokens/${selectedToken._id}/feedback`, feedback, config);
       setShowModal(false);
       setFeedback({ rating: 5, comment: '' });
       fetchData();
+      alert('Thank you for your feedback!');
     } catch (error) {
       console.error('Error submitting feedback:', error);
+      alert(error.response?.data?.message || 'Failed to submit feedback. Please try again.');
     }
   };
 
@@ -371,7 +380,7 @@ const UserDashboard = () => {
                         <p className="text-white font-semibold text-sm">{token.assignedTo.name}</p>
                       </div>
                     )}
-                    {token.status === 'solved' && !token.feedback && (
+                    {(['solved', 'resolved'].includes(token.status)) && !token.feedback && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent opening modal when clicking this button
@@ -459,8 +468,8 @@ const UserDashboard = () => {
                   </div>
                 )}
 
-                {/* Feedback Section - Only show if status is 'solved' and no feedback given yet */}
-                {selectedToken.status === 'solved' && !selectedToken.feedback && (
+                {/* Feedback Section - Only show if status is 'solved' or 'resolved' and no feedback given yet */}
+                {(['solved', 'resolved'].includes(selectedToken.status)) && !selectedToken.feedback && (
                   <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-6 border border-green-500/30">
                     <h4 className="text-lg font-bold text-white mb-4">Rate This Solution</h4>
                     <div className="space-y-4">

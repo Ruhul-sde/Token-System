@@ -87,6 +87,9 @@ const tokenSchema = new mongoose.Schema({
   solvedAt: {
     type: Date
   },
+  solution: {
+    type: String
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -16,9 +16,19 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'Token is not valid' });
     }
 
+    // Check if user is suspended or frozen
+    if (user.status === 'suspended') {
+      return res.status(403).json({ message: 'Your account has been suspended. Please contact administrator.' });
+    }
+
+    if (user.status === 'frozen') {
+      return res.status(403).json({ message: 'Your account has been frozen. Please contact administrator.' });
+    }
+
     console.log('Authenticated user:', {
       email: user.email,
       role: user.role,
+      status: user.status,
       deptId: user.department?._id?.toString() || 'none',
       deptName: user.department?.name || 'none'
     });

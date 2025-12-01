@@ -169,14 +169,16 @@ router.get('/', authenticate, async (req, res) => {
       query.createdBy = req.user._id;
       console.log('→ User: Showing only own tokens');
     } else if (req.user.role === 'admin') {
-      // Admins see all tokens in their department
+      // Admins see all tokens in their department, or all tokens if no department assigned
       if (req.user.department) {
-        // Ensure department is ObjectId
-        query.department = new mongoose.Types.ObjectId(req.user.department);
-        console.log('→ Admin: Showing all tokens in department:', req.user.department.toString());
+        const deptId = typeof req.user.department === 'string' 
+          ? new mongoose.Types.ObjectId(req.user.department)
+          : req.user.department;
+        query.department = deptId;
+        console.log('→ Admin: Showing tokens in department:', deptId.toString());
       } else {
-        console.log('⚠️ Admin has no department assigned - showing ALL tokens as fallback');
-        // Don't restrict - show all tokens if admin has no department
+        console.log('→ Admin: No department assigned - showing ALL tokens');
+        // No restriction - admins without department see all tokens
       }
     } else if (req.user.role === 'superadmin') {
       // Super admins see ALL tokens - no filtering
@@ -280,7 +282,7 @@ router.patch('/:id/assign', authenticate, authorize('admin', 'superadmin'), vali
 
 router.patch('/:id/update', authenticate, authorize('admin', 'superadmin'), validateObjectId, async (req, res) => {
   try {
-    const { status, priority, assignedTo, expectedResolutionDate, actualResolutionDate } = req.body;
+    const { status, priority, assignedTo, expectedResolutionDate, actualResolutionDate, solution } = req.body;
 
     const updateData = {};
     if (status) updateData.status = status;
@@ -291,6 +293,15 @@ router.patch('/:id/update', authenticate, authorize('admin', 'superadmin'), vali
 
     // If status is closed or resolved, set solvedBy and calculate timeToSolve
     if (status === 'closed' || status === 'resolved') {
+      // Validate that solution is provided
+      if (!solution || solution.trim().length === 0) {
+        return res.status(400).json({ message: 'Solution is required to mark token as resolved' });
+      }
+      if (solution.trim().length < 10) {
+        return res.status(400).json({ message: 'Solution must be at least 10 characters long' });
+      }
+      
+      updateData.solution = solution;
       updateData.solvedBy = req.user._id;
       updateData.solvedAt = new Date();
       const token = await Token.findById(req.params.id); // Fetch token to calculate time difference
@@ -422,9 +433,9 @@ router.post('/:id/feedback', authenticate, validateObjectId, async (req, res) =>
       return res.status(404).json({ message: 'Token not found' }); // Token not found error
     }
 
-    // Check if token is resolved or closed before allowing feedback
-    if (!['resolved', 'closed'].includes(token.status)) {
-      return res.status(400).json({ message: 'Feedback can only be provided for resolved or closed tokens' });
+    // Check if token is resolved, closed, or solved before allowing feedback
+    if (!['resolved', 'closed', 'solved'].includes(token.status)) {
+      return res.status(400).json({ message: 'Feedback can only be provided for resolved or solved tokens' });
     }
 
     // Authorization check: only the creator can provide feedback

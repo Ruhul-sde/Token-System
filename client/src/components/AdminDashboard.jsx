@@ -82,6 +82,8 @@ const AdminDashboard = () => {
     department: 'all'
   });
   const [filteredTokens, setFilteredTokens] = useState([]);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
   const { API_URL, user } = useAuth();
 
   useEffect(() => {
@@ -108,12 +110,19 @@ const AdminDashboard = () => {
 
   const fetchData = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const token = localStorage.getItem('token');
       console.log('===== ADMIN DASHBOARD FETCH =====');
       console.log('Fetching tokens from:', `${API_URL}/tokens`);
       console.log('Auth token present:', !!token);
       console.log('User role:', user?.role);
+      console.log('User department:', user?.department);
       
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
       const config = {
         headers: { 
           'Authorization': `Bearer ${token}` 
@@ -144,6 +153,9 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('❌ Error fetching data:', error.response?.data || error.message);
       console.error('Error details:', error);
+      setError(error.response?.data?.message || error.message || 'Failed to fetch data');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -156,25 +168,41 @@ const AdminDashboard = () => {
     }
   };
 
-  const updateTokenStatus = async (tokenId, status) => {
+  const updateTokenStatus = async (tokenId, status, solution = null) => {
     try {
-      await axios.patch(`${API_URL}/tokens/${tokenId}/update`, { status });
+      const updateData = { status };
+      if (solution) {
+        updateData.solution = solution;
+      }
+      await axios.patch(`${API_URL}/tokens/${tokenId}/update`, updateData);
       fetchData();
+      setShowModal(false);
     } catch (error) {
       console.error('Error updating token:', error);
+      alert(error.response?.data?.message || 'Failed to update token status');
     }
   };
 
   const addRemark = async (tokenId, text) => {
     try {
-      await axios.post(`${API_URL}/tokens/${tokenId}/remarks`, { text });
+      const token = localStorage.getItem('token');
+      const config = {
+        headers: { 
+          'Authorization': `Bearer ${token}` 
+        }
+      };
+      
+      await axios.post(`${API_URL}/tokens/${tokenId}/remarks`, { text }, config);
+      
+      // Refresh the selected token to show new remark
+      const updatedTokenRes = await axios.get(`${API_URL}/tokens/${tokenId}`, config);
+      setSelectedToken(updatedTokenRes.data);
+      
+      // Refresh all tokens
       fetchData();
-      if (selectedToken?._id === tokenId) {
-        const updatedToken = await axios.get(`${API_URL}/tokens/${tokenId}`);
-        setSelectedToken(updatedToken.data);
-      }
     } catch (error) {
       console.error('Error adding remark:', error);
+      alert(error.response?.data?.message || 'Failed to add remark. Please try again.');
     }
   };
 
@@ -206,6 +234,33 @@ const AdminDashboard = () => {
       pending: deptTokens.filter(t => t.status === 'pending').length
     };
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900 flex items-center justify-center">
+        <div className="text-white text-2xl">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900">
+        <div className="container mx-auto px-4 py-8">
+          <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-6 text-center">
+            <h2 className="text-2xl font-bold text-red-400 mb-4">Error Loading Dashboard</h2>
+            <p className="text-white/80 mb-4">{error}</p>
+            <button 
+              onClick={fetchData}
+              className="px-6 py-2 bg-[#ED1B2F] hover:bg-[#ED1B2F]/80 text-white rounded-lg transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900">
@@ -240,7 +295,7 @@ const AdminDashboard = () => {
             </div>
             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
               <h3 className="text-white/60 text-sm mb-2">Resolved</h3>
-              <p className="text-3xl font-bold text-green-400">{stats.overview.solvedTokens}</p>
+              <p className="text-3xl font-bold text-green-400">{stats.overview.resolvedTokens || stats.overview.solvedTokens || 0}</p>
             </div>
           </div>
         )}
@@ -399,31 +454,59 @@ const AdminDashboard = () => {
                 </div>
 
                 <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                  <h4 className="text-lg font-bold text-white mb-4">Quick Actions</h4>
-                  <div className="grid grid-cols-2 gap-4">
+                  <h4 className="text-lg font-bold text-white mb-4">Update Status</h4>
+                  <div className="space-y-4">
                     <select
-                      onChange={(e) => updateTokenStatus(selectedToken._id, e.target.value)}
-                      className="px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white"
-                      defaultValue=""
+                      id={`statusSelect-${selectedToken._id}`}
+                      className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white"
+                      defaultValue={selectedToken.status}
                     >
-                      <option value="" disabled className="text-gray-900">Update Status</option>
                       <option value="pending" className="text-gray-900">Pending</option>
                       <option value="assigned" className="text-gray-900">Assigned</option>
                       <option value="in-progress" className="text-gray-900">In Progress</option>
                       <option value="resolved" className="text-gray-900">Resolved</option>
                     </select>
 
-                    <select
-                      onChange={(e) => assignToken(selectedToken._id, e.target.value, selectedToken.department?._id)}
-                      className="px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white"
-                      defaultValue=""
+                    <div id={`solutionField-${selectedToken._id}`} style={{ display: 'none' }}>
+                      <label className="block text-white/80 text-sm mb-2">Solution (Required for Resolved status)</label>
+                      <textarea
+                        id={`solutionText-${selectedToken._id}`}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#455185] min-h-32"
+                        placeholder="Describe how you solved this issue..."
+                      />
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        const statusSelect = document.getElementById(`statusSelect-${selectedToken._id}`);
+                        const solutionText = document.getElementById(`solutionText-${selectedToken._id}`);
+                        const newStatus = statusSelect?.value;
+                        
+                        if (newStatus === 'resolved') {
+                          const solution = solutionText?.value;
+                          if (!solution || solution.trim().length < 10) {
+                            alert('Please provide a solution (minimum 10 characters) to mark the token as resolved');
+                            return;
+                          }
+                          await updateTokenStatus(selectedToken._id, newStatus, solution.trim());
+                        } else {
+                          await updateTokenStatus(selectedToken._id, newStatus);
+                        }
+                      }}
+                      className="w-full py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01626] text-white rounded-xl font-semibold transition-all"
                     >
-                      <option value="" disabled className="text-gray-900">Assign To</option>
-                      {users.filter(u => u.role === 'admin' || u.role === 'superadmin').map(u => (
-                        <option key={u._id} value={u._id} className="text-gray-900">{u.name}</option>
-                      ))}
-                    </select>
+                      Update Status
+                    </button>
                   </div>
+                  <script dangerouslySetInnerHTML={{__html: `
+                    const statusSelect = document.getElementById('statusSelect-${selectedToken._id}');
+                    const solutionField = document.getElementById('solutionField-${selectedToken._id}');
+                    if (statusSelect && solutionField) {
+                      statusSelect.addEventListener('change', function() {
+                        solutionField.style.display = this.value === 'resolved' ? 'block' : 'none';
+                      });
+                    }
+                  `}} />
                 </div>
 
                 {selectedToken.remarks && selectedToken.remarks.length > 0 && (
@@ -446,16 +529,19 @@ const AdminDashboard = () => {
                 <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                   <h4 className="text-lg font-bold text-white mb-4">Add Remark</h4>
                   <textarea
-                    id="remarkText"
+                    id={`remarkText-${selectedToken._id}`}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#455185] min-h-24"
                     placeholder="Enter your remark..."
                   />
                   <button
-                    onClick={() => {
-                      const text = document.getElementById('remarkText').value;
-                      if (text.trim()) {
-                        addRemark(selectedToken._id, text);
-                        document.getElementById('remarkText').value = '';
+                    onClick={async () => {
+                      const textarea = document.getElementById(`remarkText-${selectedToken._id}`);
+                      const text = textarea?.value;
+                      if (text && text.trim()) {
+                        await addRemark(selectedToken._id, text.trim());
+                        if (textarea) {
+                          textarea.value = '';
+                        }
                       }
                     }}
                     className="mt-3 w-full py-3 bg-gradient-to-r from-[#455185] to-[#3a456f] hover:from-[#3a456f] hover:to-[#2f3859] text-white rounded-xl font-semibold transition-all"
@@ -463,6 +549,36 @@ const AdminDashboard = () => {
                     Submit Remark
                   </button>
                 </div>
+
+                {/* Solution Display */}
+                {selectedToken.solution && (
+                  <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-6 border border-green-500/30">
+                    <h4 className="text-lg font-bold text-white mb-3">Solution Provided</h4>
+                    <p className="text-white/90 mb-2">{selectedToken.solution}</p>
+                    {selectedToken.solvedBy && (
+                      <p className="text-white/50 text-xs">
+                        Solved by {selectedToken.solvedBy.name}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Feedback Section - Display if feedback exists */}
+                {selectedToken.feedback && (
+                  <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl p-6 border border-purple-500/30">
+                    <h4 className="text-lg font-bold text-white mb-3">User Feedback</h4>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-yellow-400 text-xl">{'⭐'.repeat(selectedToken.feedback.rating)}</span>
+                      <span className="text-white/60 text-sm">({selectedToken.feedback.rating}/5)</span>
+                    </div>
+                    {selectedToken.feedback.comment && (
+                      <p className="text-white/80 text-sm mb-2">{selectedToken.feedback.comment}</p>
+                    )}
+                    <p className="text-white/50 text-xs">
+                      Submitted on {new Date(selectedToken.feedback.submittedAt).toLocaleString()}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -471,5 +587,20 @@ const AdminDashboard = () => {
     </div>
   );
 };
+
+// Add event listener for status select change
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    document.addEventListener('change', (e) => {
+      if (e.target.id && e.target.id.startsWith('statusSelect-')) {
+        const tokenId = e.target.id.replace('statusSelect-', '');
+        const solutionField = document.getElementById(`solutionField-${tokenId}`);
+        if (solutionField) {
+          solutionField.style.display = e.target.value === 'resolved' ? 'block' : 'none';
+        }
+      }
+    });
+  });
+}
 
 export default AdminDashboard;

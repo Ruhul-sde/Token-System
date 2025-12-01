@@ -33,6 +33,21 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department'
   },
+  status: {
+    type: String,
+    enum: ['active', 'suspended', 'frozen'],
+    default: 'active'
+  },
+  statusReason: {
+    type: String
+  },
+  statusChangedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  statusChangedAt: {
+    type: Date
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -1,4 +1,3 @@
-
 import express from 'express';
 import Department from '../models/Department.js';
 import { authenticate, authorize } from '../middleware/auth.js';
@@ -8,7 +7,14 @@ const router = express.Router();
 // Get all departments
 router.get('/', authenticate, async (req, res) => {
   try {
-    const departments = await Department.find().sort({ name: 1 });
+    let query = {};
+
+    // If admin (not superadmin), only show their department
+    if (req.user.role === 'admin' && req.user.department) {
+      query._id = req.user.department;
+    }
+
+    const departments = await Department.find(query);
     res.json(departments);
   } catch (error) {
     console.error('Error fetching departments:', error);
