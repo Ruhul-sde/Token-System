@@ -1,23 +1,71 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Sphere, Box, Float, MeshDistortMaterial } from '@react-three/drei';
 
-const AnimatedScene = () => (
-  <>
-    <Float speed={1.5} rotationIntensity={1} floatIntensity={0.5}>
-      <Sphere args={[0.8, 32, 32]} position={[-2, 0, 0]}>
-        <MeshDistortMaterial color="#ED1B2F" roughness={0.3} metalness={0.8} distort={0.4} speed={2} />
-      </Sphere>
-    </Float>
-    <Float speed={2} rotationIntensity={1.5} floatIntensity={0.8}>
-      <Box args={[1, 1, 1]} position={[2, 0, 0]}>
-        <MeshDistortMaterial color="#455185" roughness={0.2} metalness={0.9} distort={0.3} speed={1.5} />
-      </Box>
-    </Float>
-  </>
-);
+const Header3D = () => {
+  const [webglSupported, setWebglSupported] = useState(true);
+  const [ThreeComponents, setThreeComponents] = useState(null);
+
+  useEffect(() => {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) {
+        setWebglSupported(false);
+        return;
+      }
+      
+      Promise.all([
+        import('@react-three/fiber'),
+        import('@react-three/drei')
+      ]).then(([fiber, drei]) => {
+        setThreeComponents({ 
+          Canvas: fiber.Canvas, 
+          OrbitControls: drei.OrbitControls, 
+          Sphere: drei.Sphere, 
+          Box: drei.Box, 
+          Float: drei.Float, 
+          MeshDistortMaterial: drei.MeshDistortMaterial 
+        });
+      }).catch(() => setWebglSupported(false));
+    } catch {
+      setWebglSupported(false);
+    }
+  }, []);
+
+  if (!webglSupported || !ThreeComponents) {
+    return (
+      <div className="mb-8 h-48 rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-gradient-to-br from-[#ED1B2F]/30 to-[#455185]/30 backdrop-blur-xl flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-5xl mb-2 animate-pulse">📝</div>
+          <h1 className="text-2xl font-bold text-white">My Tickets</h1>
+        </div>
+      </div>
+    );
+  }
+
+  const { Canvas, OrbitControls, Sphere, Box, Float, MeshDistortMaterial } = ThreeComponents;
+
+  return (
+    <div className="mb-8 h-48 rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-gradient-to-br from-[#ED1B2F]/20 to-[#455185]/20 backdrop-blur-xl">
+      <Canvas camera={{ position: [0, 0, 5] }}>
+        <ambientLight intensity={0.6} />
+        <pointLight position={[10, 10, 10]} intensity={1.5} />
+        <Float speed={1.5} rotationIntensity={1} floatIntensity={0.5}>
+          <Sphere args={[0.8, 32, 32]} position={[-2, 0, 0]}>
+            <MeshDistortMaterial color="#ED1B2F" roughness={0.3} metalness={0.8} distort={0.4} speed={2} />
+          </Sphere>
+        </Float>
+        <Float speed={2} rotationIntensity={1.5} floatIntensity={0.8}>
+          <Box args={[1, 1, 1]} position={[2, 0, 0]}>
+            <MeshDistortMaterial color="#455185" roughness={0.2} metalness={0.9} distort={0.3} speed={1.5} />
+          </Box>
+        </Float>
+        <OrbitControls enableZoom={false} autoRotate autoRotateSpeed={0.5} />
+      </Canvas>
+    </div>
+  );
+};
 
 const UserDashboard = () => {
   const [tokens, setTokens] = useState([]);
@@ -147,14 +195,7 @@ const UserDashboard = () => {
           </div>
         )}
         {/* 3D Header */}
-        <div className="mb-8 h-64 rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-gradient-to-br from-[#ED1B2F]/20 to-[#455185]/20 backdrop-blur-xl">
-          <Canvas camera={{ position: [0, 0, 5] }}>
-            <ambientLight intensity={0.6} />
-            <pointLight position={[10, 10, 10]} intensity={1.5} />
-            <AnimatedScene />
-            <OrbitControls enableZoom={false} autoRotate autoRotateSpeed={0.5} />
-          </Canvas>
-        </div>
+        <Header3D />
 
         {/* Dashboard Header */}
         <div className="mb-8">

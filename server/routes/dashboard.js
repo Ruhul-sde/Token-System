@@ -6,15 +6,15 @@ import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
 
-router.get('/stats', authenticate, authorize('superadmin'), async (req, res) => {
+router.get('/stats', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const totalTokens = await Token.countDocuments();
-    const solvedTokens = await Token.countDocuments({ status: 'solved' });
+    const solvedTokens = await Token.countDocuments({ status: 'resolved' });
     const pendingTokens = await Token.countDocuments({ status: 'pending' });
     const assignedTokens = await Token.countDocuments({ status: 'assigned' });
 
     const solverStats = await Token.aggregate([
-      { $match: { status: 'solved' } },
+      { $match: { status: 'resolved' } },
       {
         $group: {
           _id: '$solvedBy',

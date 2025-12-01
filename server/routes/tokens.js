@@ -96,7 +96,7 @@ router.post('/', authenticate, async (req, res) => {
       title,
       description,
       priority,
-      department: department ? mongoose.Types.ObjectId(department) : null,
+      department: department || null,
       category,
       subCategory,
       attachments,
@@ -158,55 +158,57 @@ router.get('/', authenticate, async (req, res) => {
   try {
     let query = {};
 
-    // Filter tokens based on user role
-    if (req.user.role === 'user') {
-      query.createdBy = req.user._id; // User sees their own tokens
-    } else if (req.user.role === 'admin') {
-      if (req.user.department) {
-        // Admin sees tokens for their department
-        // Extract the department ID and ensure it's an ObjectId
-        const deptId = req.user.department._id || req.user.department;
-        query.department = deptId;
-      }
-    }
-    // Superadmin sees all tokens (no filter applied)
-
     console.log('===== TOKEN FETCH DEBUG =====');
     console.log('User:', req.user.email);
     console.log('User Role:', req.user.role);
-    console.log('User Department Name:', req.user.department?.name);
-    console.log('User Department ID:', req.user.department?._id?.toString() || req.user.department?.toString());
-    console.log('Query Department:', query.department?.toString());
-    console.log('Full Query:', JSON.stringify(query));
+    console.log('User Department ID:', req.user.department?.toString() || 'None');
+
+    // Role-based filtering
+    if (req.user.role === 'user') {
+      // Users see only tokens they created
+      query.createdBy = req.user._id;
+      console.log('→ User: Showing only own tokens');
+    } else if (req.user.role === 'admin') {
+      // Admins see all tokens in their department
+      if (req.user.department) {
+        // Ensure department is ObjectId
+        query.department = new mongoose.Types.ObjectId(req.user.department);
+        console.log('→ Admin: Showing all tokens in department:', req.user.department.toString());
+      } else {
+        console.log('⚠️ Admin has no department assigned - showing ALL tokens as fallback');
+        // Don't restrict - show all tokens if admin has no department
+      }
+    } else if (req.user.role === 'superadmin') {
+      // Super admins see ALL tokens - no filtering
+      console.log('→ Superadmin: Showing ALL tokens');
+    }
+
+    console.log('Query:', JSON.stringify(query));
 
     const tokens = await Token.find(query)
-      .populate(['createdBy', 'assignedTo', 'solvedBy', 'department']) // Populate related user and department info
-      .sort({ createdAt: -1 }); // Sort by creation date descending
+      .populate(['createdBy', 'assignedTo', 'solvedBy', 'department'])
+      .sort({ createdAt: -1 });
 
-    console.log(`Found ${tokens.length} tokens for ${req.user.role}`);
+    console.log(`✓ Found ${tokens.length} tokens for ${req.user.role}`);
+    
     if (tokens.length > 0) {
-      console.log('Token Details:');
-      tokens.forEach(t => {
-        console.log(`  - ${t.tokenNumber}: Dept=${t.department?.name || 'None'} (${t.department?._id?.toString() || 'N/A'}), Status=${t.status}`);
+      console.log('First 3 tokens:');
+      tokens.slice(0, 3).forEach(t => {
+        console.log(`  - ${t.tokenNumber}: ${t.title} (Dept: ${t.department?.name || 'None'}) Created by: ${t.createdBy?.name}`);
       });
     } else {
-      console.log('⚠️ No tokens found for this admin. Debugging...');
-      const allTokens = await Token.find({}).populate('department');
-      console.log(`Total tokens in DB: ${allTokens.length}`);
-      console.log('Expected Department ID:', query.department?.toString());
-      console.log('Tokens by department:');
-      allTokens.forEach(t => {
-        const tokenDeptId = t.department?._id?.toString() || 'N/A';
-        const match = tokenDeptId === (query.department?._id?.toString() || query.department?.toString()) ? '✓ MATCH' : '✗ NO MATCH';
-        console.log(`  - ${t.tokenNumber}: Dept=${t.department?.name || 'None'} (${tokenDeptId}) ${match}`);
-      });
+      const totalCount = await Token.countDocuments({});
+      console.log(`⚠️ No tokens returned but ${totalCount} total tokens exist in database`);
+      if (req.user.role === 'admin' && !req.user.department) {
+        console.log('💡 Admin needs a department assignment to see tokens');
+      }
     }
     console.log('=============================');
 
     res.json(tokens);
   } catch (error) {
-    console.error('Error fetching tokens:', error);
-    res.status(500).json({ message: error.message }); // Generic error handling
+    console.error('❌ Error fetching tokens:', error);
+    res.status(500).json({ message: error.message });
   }
 });
 

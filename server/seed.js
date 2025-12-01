@@ -1,4 +1,3 @@
-
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
@@ -24,8 +23,8 @@ const seedDatabase = async () => {
 
     // Create Departments with Categories
     const departments = await Department.insertMany([
-      { 
-        name: 'IT Support', 
+      {
+        name: 'IT Support',
         description: 'Information Technology Support',
         categories: [
           { name: 'Hardware', description: 'Hardware related issues', subCategories: ['Desktop', 'Laptop', 'Printer'] },
@@ -33,8 +32,8 @@ const seedDatabase = async () => {
           { name: 'Network', description: 'Network connectivity issues', subCategories: ['WiFi', 'LAN', 'VPN'] }
         ]
       },
-      { 
-        name: 'Human Resources', 
+      {
+        name: 'Human Resources',
         description: 'HR Department',
         categories: [
           { name: 'Recruitment', description: 'Hiring and onboarding', subCategories: ['Job Posting', 'Interviews', 'Onboarding'] },
@@ -42,8 +41,8 @@ const seedDatabase = async () => {
           { name: 'Payroll', description: 'Salary and compensation', subCategories: ['Salary', 'Deductions', 'Bonuses'] }
         ]
       },
-      { 
-        name: 'Finance', 
+      {
+        name: 'Finance',
         description: 'Finance and Accounting',
         categories: [
           { name: 'Accounts Payable', description: 'Vendor payments', subCategories: ['Invoices', 'Payments', 'Reconciliation'] },
@@ -51,16 +50,16 @@ const seedDatabase = async () => {
           { name: 'Budgeting', description: 'Budget planning', subCategories: ['Planning', 'Forecasting', 'Reports'] }
         ]
       },
-      { 
-        name: 'Operations', 
+      {
+        name: 'Operations',
         description: 'Operations Management',
         categories: [
           { name: 'Logistics', description: 'Supply chain management', subCategories: ['Shipping', 'Inventory', 'Warehousing'] },
           { name: 'Quality Control', description: 'Quality assurance', subCategories: ['Testing', 'Inspection', 'Compliance'] }
         ]
       },
-      { 
-        name: 'Marketing', 
+      {
+        name: 'Marketing',
         description: 'Marketing and Communications',
         categories: [
           { name: 'Digital Marketing', description: 'Online marketing', subCategories: ['SEO', 'Social Media', 'Email Campaigns'] },
@@ -68,8 +67,8 @@ const seedDatabase = async () => {
           { name: 'Events', description: 'Event management', subCategories: ['Planning', 'Promotion', 'Execution'] }
         ]
       },
-      { 
-        name: 'Customer Service', 
+      {
+        name: 'Customer Service',
         description: 'Customer Support',
         categories: [
           { name: 'Technical Support', description: 'Product technical issues', subCategories: ['Troubleshooting', 'Setup', 'Training'] },
@@ -81,7 +80,7 @@ const seedDatabase = async () => {
 
     // Create Users
     const hashedPassword = await bcrypt.hash('password123', 10);
-    
+
     const users = await User.insertMany([
       // Regular Users
       {
@@ -119,7 +118,7 @@ const seedDatabase = async () => {
         employeeCode: 'EMP005',
         role: 'user'
       },
-      
+
       // Admins - One for each department
       {
         email: 'admin.it@akshay.com',
@@ -127,7 +126,8 @@ const seedDatabase = async () => {
         name: 'IT Admin',
         employeeCode: 'ADM001',
         role: 'admin',
-        department: departments[0]._id
+        department: departments[0]._id,
+        isActive: true
       },
       {
         email: 'admin.hr@akshay.com',
@@ -135,7 +135,8 @@ const seedDatabase = async () => {
         name: 'HR Admin',
         employeeCode: 'ADM002',
         role: 'admin',
-        department: departments[1]._id
+        department: departments[1]._id,
+        isActive: true
       },
       {
         email: 'admin.finance@akshay.com',
@@ -143,7 +144,8 @@ const seedDatabase = async () => {
         name: 'Finance Admin',
         employeeCode: 'ADM003',
         role: 'admin',
-        department: departments[2]._id
+        department: departments[2]._id,
+        isActive: true
       },
       {
         email: 'admin.ops@akshay.com',
@@ -151,7 +153,8 @@ const seedDatabase = async () => {
         name: 'Operations Admin',
         employeeCode: 'ADM004',
         role: 'admin',
-        department: departments[3]._id
+        department: departments[3]._id,
+        isActive: true
       },
       {
         email: 'admin.marketing@akshay.com',
@@ -159,7 +162,8 @@ const seedDatabase = async () => {
         name: 'Marketing Admin',
         employeeCode: 'ADM005',
         role: 'admin',
-        department: departments[4]._id
+        department: departments[4]._id,
+        isActive: true
       },
       {
         email: 'admin.cs@akshay.com',
@@ -167,9 +171,10 @@ const seedDatabase = async () => {
         name: 'Customer Service Admin',
         employeeCode: 'ADM006',
         role: 'admin',
-        department: departments[5]._id
+        department: departments[5]._id,
+        isActive: true
       },
-      
+
       // Super Admins
       {
         email: 'superadmin@akshay.com',
@@ -216,18 +221,59 @@ const seedDatabase = async () => {
     const statuses = ['pending', 'assigned', 'resolved'];
     const priorities = ['low', 'medium', 'high'];
     const regularUsers = users.filter(u => u.role === 'user');
-    
-    for (let i = 0; i < 30; i++) {
+
+    // Create at least 2 tokens per department
+    let tokenCounter = 0;
+    for (const dept of departments) {
+      for (let j = 0; j < 2; j++) {
+        tokenCounter++;
+        const status = statuses[Math.floor(Math.random() * statuses.length)];
+        const createdAt = new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000);
+        const categoryIndex = Math.floor(Math.random() * dept.categories.length);
+        const category = dept.categories[categoryIndex].name;
+
+        const token = {
+          tokenNumber: `T${String(tokenCounter).padStart(6, '0')}`,
+          title: `${dept.name} - Request ${j + 1}`,
+          description: `This is a sample token request for ${dept.name} department. Issue #${tokenCounter}`,
+          priority: priorities[Math.floor(Math.random() * priorities.length)],
+          status: status,
+          createdBy: regularUsers[Math.floor(Math.random() * regularUsers.length)]._id,
+          department: dept._id,
+          category: category,
+          createdAt: createdAt
+        };
+
+        if (status === 'assigned' || status === 'resolved') {
+          const deptAdmins = adminUsers.filter(a => a.department.toString() === dept._id.toString());
+          if (deptAdmins.length > 0) {
+            token.assignedTo = deptAdmins[0]._id;
+          }
+        }
+
+        if (status === 'resolved') {
+          token.solvedAt = new Date(createdAt.getTime() + Math.floor(Math.random() * 5) * 24 * 60 * 60 * 1000);
+          token.solvedBy = token.assignedTo;
+          token.timeToSolve = Math.floor((token.solvedAt - createdAt) / 1000 / 60);
+        }
+
+        tokens.push(token);
+      }
+    }
+
+    // Add some random tokens
+    for (let i = 0; i < 18; i++) {
+      tokenCounter++;
       const status = statuses[Math.floor(Math.random() * statuses.length)];
       const createdAt = new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000);
       const dept = departments[Math.floor(Math.random() * departments.length)];
       const categoryIndex = Math.floor(Math.random() * dept.categories.length);
       const category = dept.categories[categoryIndex].name;
-      
+
       const token = {
-        tokenNumber: `T${String(i + 1).padStart(6, '0')}`,
-        title: `Token Request ${i + 1}`,
-        description: `This is a sample token request for testing purposes. Issue #${i + 1}`,
+        tokenNumber: `T${String(tokenCounter).padStart(6, '0')}`,
+        title: `Token Request ${tokenCounter}`,
+        description: `This is a sample token request for testing purposes. Issue #${tokenCounter}`,
         priority: priorities[Math.floor(Math.random() * priorities.length)],
         status: status,
         createdBy: regularUsers[Math.floor(Math.random() * regularUsers.length)]._id,
