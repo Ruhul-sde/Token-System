@@ -186,4 +186,48 @@ router.post('/change-password', authenticate, async (req, res) => {
   }
 });
 
+// Update user profile
+router.patch('/update-profile', authenticate, async (req, res) => {
+  try {
+    const { name, employeeCode, companyName } = req.body;
+    const userId = req.user._id;
+
+    // Validate name
+    if (name && name.trim().length < 2) {
+      return res.status(400).json({ message: 'Name must be at least 2 characters' });
+    }
+
+    // Check if employeeCode is unique (if provided and changed)
+    if (employeeCode && employeeCode !== req.user.employeeCode) {
+      const existingUser = await User.findOne({ employeeCode, _id: { $ne: userId } });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Employee code already exists' });
+      }
+    }
+
+    const updateData = {};
+    if (name) updateData.name = name.trim();
+    if (employeeCode !== undefined) updateData.employeeCode = employeeCode.trim() || null;
+    if (companyName !== undefined) updateData.companyName = companyName.trim();
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password').populate('department');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ 
+      message: 'Profile updated successfully',
+      user: updatedUser 
+    });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ message: 'Failed to update profile', error: error.message });
+  }
+});
+
 export default router;

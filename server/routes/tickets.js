@@ -4,8 +4,8 @@ import Ticket from '../models/Ticket.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import Department from '../models/Department.js';
 import { generateTicketNumber } from '../utils/ticketGenerator.js'; // Imported the ticket generator utility
-import { sendEmailNotification } from '../utils/email.js';
-import User from '../models/User.js'; // Assuming User model is needed for fetching admins
+import { sendEmailNotification, sendTicketCreatedEmail, sendTicketResolvedEmail } from '../utils/email.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 
@@ -116,10 +116,10 @@ router.post('/', authenticate, async (req, res) => {
     });
     console.log('================================');
 
-    // Notify admins about the new ticket
-    const admins = await User.find({ role: { $in: ['admin', 'superadmin'] } });
-    for (const admin of admins) {
-      await sendEmailNotification(admin.email, ticket); // Send email notification to admins
+    // Send email to the user who created the ticket
+    if (ticket.createdBy && ticket.createdBy.email) {
+      await sendTicketCreatedEmail(ticket.createdBy.email, ticket);
+      console.log(`✅ Ticket creation email sent to: ${ticket.createdBy.email}`);
     }
 
     res.status(201).json(ticket);
@@ -171,7 +171,7 @@ router.get('/', authenticate, async (req, res) => {
     } else if (req.user.role === 'admin') {
       // Admins see all tickets in their department, or all tickets if no department assigned
       if (req.user.department) {
-        const deptId = typeof req.user.department === 'string' 
+        const deptId = typeof req.user.department === 'string'
           ? new mongoose.Types.ObjectId(req.user.department)
           : req.user.department;
         query.department = deptId;
@@ -192,7 +192,7 @@ router.get('/', authenticate, async (req, res) => {
       .sort({ createdAt: -1 });
 
     console.log(`✓ Found ${tickets.length} tickets for ${req.user.role}`);
-    
+
     if (tickets.length > 0) {
       console.log('First 3 tickets:');
       tickets.slice(0, 3).forEach(t => {
@@ -232,6 +232,12 @@ router.patch('/:id/solve', authenticate, authorize('admin', 'superadmin'), valid
 
     await ticket.save();
     await ticket.populate(['createdBy', 'assignedTo', 'solvedBy', 'department']); // Repopulate after save
+
+    // Send email notification when ticket is resolved
+    if (ticket.createdBy && ticket.createdBy.email) {
+      await sendTicketResolvedEmail(ticket.createdBy.email, ticket);
+      console.log(`✅ Ticket resolution email sent to: ${ticket.createdBy.email}`);
+    }
 
     res.json(ticket);
   } catch (error) {
@@ -300,7 +306,7 @@ router.patch('/:id/update', authenticate, authorize('admin', 'superadmin'), vali
       if (solution.trim().length < 10) {
         return res.status(400).json({ message: 'Solution must be at least 10 characters long' });
       }
-      
+
       updateData.solution = solution;
       updateData.solvedBy = req.user._id;
       updateData.solvedAt = new Date();
@@ -315,6 +321,12 @@ router.patch('/:id/update', authenticate, authorize('admin', 'superadmin'), vali
       updateData,
       { new: true } // Return the updated document
     ).populate(['createdBy', 'assignedTo', 'solvedBy', 'department']); // Populate related fields
+
+    // Send email notification when ticket is resolved
+    if ((status === 'resolved' || status === 'closed') && ticket.createdBy && ticket.createdBy.email) {
+      await sendTicketResolvedEmail(ticket.createdBy.email, ticket);
+      console.log(`✅ Ticket resolution email sent to: ${ticket.createdBy.email}`);
+    }
 
     res.json(ticket);
   } catch (error) {

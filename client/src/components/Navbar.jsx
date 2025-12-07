@@ -5,11 +5,19 @@ import { useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
 
 const Navbar = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, API_URL } = useAuth();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [profileData, setProfileData] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    employeeCode: user?.employeeCode || '',
+    companyName: user?.companyName || ''
+  });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -34,7 +42,7 @@ const Navbar = () => {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/change-password`, {
+      const response = await fetch(`${API_URL}/auth/change-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -61,6 +69,51 @@ const Navbar = () => {
     } catch (error) {
       setError('Error changing password. Please try again.');
     }
+  };
+
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${API_URL}/auth/update-profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(profileData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSuccess('Profile updated successfully!');
+        setIsEditingProfile(false);
+        // Update user data in context if needed
+        setTimeout(() => {
+          setSuccess('');
+          window.location.reload(); // Refresh to get updated user data
+        }, 1500);
+      } else {
+        setError(data.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      setError('Error updating profile. Please try again.');
+    }
+  };
+
+  const openProfileModal = () => {
+    setProfileData({
+      name: user?.name || '',
+      email: user?.email || '',
+      employeeCode: user?.employeeCode || '',
+      companyName: user?.companyName || ''
+    });
+    setShowProfileModal(true);
+    setShowProfileMenu(false);
+    setIsEditingProfile(false);
   };
 
   if (!user) return null;
@@ -154,6 +207,13 @@ const Navbar = () => {
                         </div>
                       </div>
                       <div className="p-2">
+                        <button
+                          onClick={openProfileModal}
+                          className="w-full text-left px-4 py-3 text-white/90 hover:bg-gradient-to-r hover:from-white/10 hover:to-white/5 rounded-xl transition-all flex items-center gap-3 group"
+                        >
+                          <span className="text-xl group-hover:scale-110 transition-transform">👤</span>
+                          <span className="font-medium">View Profile</span>
+                        </button>
                         {(user.role === 'admin' || user.role === 'superadmin') && (
                           <button
                             onClick={() => {
@@ -195,6 +255,180 @@ const Navbar = () => {
           </div>
         </div>
       </nav>
+
+      {/* Profile Modal */}
+      {showProfileModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn" onClick={() => setShowProfileModal(false)}>
+          <div className="bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900 rounded-3xl p-8 max-w-2xl w-full border border-white/20 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#ED1B2F] to-[#455185] flex items-center justify-center text-white text-3xl shadow-lg">
+                  {user?.name?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-3xl font-bold text-white">My Profile</h3>
+                  <p className="text-white/60 text-sm">View and manage your account details</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowProfileModal(false)}
+                className="text-white/60 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {error && (
+              <div className="bg-red-500/20 border border-red-500 text-white p-4 rounded-xl mb-4 text-sm flex items-start gap-3">
+                <span className="text-xl">⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
+            
+            {success && (
+              <div className="bg-green-500/20 border border-green-500 text-white p-4 rounded-xl mb-4 text-sm flex items-start gap-3">
+                <span className="text-xl">✅</span>
+                <span>{success}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleProfileUpdate} className="space-y-5">
+              {/* Role Badge */}
+              <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                <p className="text-white/60 text-sm mb-2">Role</p>
+                <span className={`px-4 py-2 rounded-full text-sm font-bold shadow-lg uppercase tracking-wide ${getRoleBadgeColor(user.role)}`}>
+                  {user.role}
+                </span>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="block text-white/90 mb-2 text-sm font-medium">Full Name</label>
+                <input
+                  type="text"
+                  value={profileData.name}
+                  onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all"
+                  placeholder="Enter your name"
+                  disabled={!isEditingProfile}
+                  required
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-white/90 mb-2 text-sm font-medium">Email Address</label>
+                <input
+                  type="email"
+                  value={profileData.email}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white/50 placeholder-white/50 cursor-not-allowed"
+                  disabled
+                />
+                <p className="text-white/40 text-xs mt-1">Email cannot be changed</p>
+              </div>
+
+              {/* Employee Code */}
+              <div>
+                <label className="block text-white/90 mb-2 text-sm font-medium">Employee Code</label>
+                <input
+                  type="text"
+                  value={profileData.employeeCode}
+                  onChange={(e) => setProfileData({ ...profileData, employeeCode: e.target.value })}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all"
+                  placeholder="Enter employee code"
+                  disabled={!isEditingProfile}
+                />
+              </div>
+
+              {/* Company Name */}
+              <div>
+                <label className="block text-white/90 mb-2 text-sm font-medium">Company Name</label>
+                <input
+                  type="text"
+                  value={profileData.companyName}
+                  onChange={(e) => setProfileData({ ...profileData, companyName: e.target.value })}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all"
+                  placeholder="Enter company name"
+                  disabled={!isEditingProfile}
+                />
+              </div>
+
+              {/* Department */}
+              {user?.department && (
+                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                  <p className="text-white/60 text-sm mb-2">Department</p>
+                  <p className="text-white font-semibold">{user.department.name}</p>
+                </div>
+              )}
+
+              {/* Account Status */}
+              <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                <p className="text-white/60 text-sm mb-2">Account Status</p>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  user.status === 'suspended' ? 'bg-red-500/20 text-red-400 border border-red-500/50' :
+                  user.status === 'frozen' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50' :
+                  'bg-green-500/20 text-green-400 border border-green-500/50'
+                }`}>
+                  {user.status || 'active'}
+                </span>
+              </div>
+
+              {/* Member Since */}
+              <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                <p className="text-white/60 text-sm mb-2">Member Since</p>
+                <p className="text-white font-semibold">{new Date(user.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 mt-6">
+                {!isEditingProfile ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowProfileModal(false)}
+                      className="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all font-medium border border-white/20"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingProfile(true)}
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-all font-medium shadow-lg"
+                    >
+                      Edit Profile
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingProfile(false);
+                        setProfileData({
+                          name: user?.name || '',
+                          email: user?.email || '',
+                          employeeCode: user?.employeeCode || '',
+                          companyName: user?.companyName || ''
+                        });
+                        setError('');
+                      }}
+                      className="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all font-medium border border-white/20"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl transition-all font-medium shadow-lg"
+                    >
+                      Save Changes
+                    </button>
+                  </>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Password Change Modal */}
       {showPasswordModal && (
