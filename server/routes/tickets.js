@@ -223,7 +223,7 @@ router.patch('/:id/solve', authenticate, authorize('admin', 'superadmin'), valid
     }
 
     const solvedAt = new Date();
-    const timeToSolve = Math.floor((solvedAt - ticket.createdAt) / 1000 / 60); // Calculate time to solve in minutes
+    const timeToSolve = solvedAt - ticket.createdAt; // Calculate time to solve in milliseconds
 
     ticket.status = 'resolved';
     ticket.solvedBy = req.user._id;
@@ -312,7 +312,7 @@ router.patch('/:id/update', authenticate, authorize('admin', 'superadmin'), vali
       updateData.solvedAt = new Date();
       const ticket = await Ticket.findById(req.params.id); // Fetch ticket to calculate time difference
       if (ticket) {
-        updateData.timeToSolve = Math.floor((new Date() - ticket.createdAt) / 1000 / 60);
+        updateData.timeToSolve = new Date() - ticket.createdAt; // Store in milliseconds
       }
     }
 

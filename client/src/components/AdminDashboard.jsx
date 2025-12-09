@@ -102,7 +102,126 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tokens');
   const [searchQuery, setSearchQuery] = useState('');
+  const [solutionSortBy, setSolutionSortBy] = useState('date');
+  const [solutionSortOrder, setSolutionSortOrder] = useState('desc');
+  const [solutionCategoryFilter, setSolutionCategoryFilter] = useState('all');
+  const [solutionPriorityFilter, setSolutionPriorityFilter] = useState('all');
+  const [solutionViewMode, setSolutionViewMode] = useState('detailed');
+  const [expandedSolutions, setExpandedSolutions] = useState({});
+  const [copiedSolutionId, setCopiedSolutionId] = useState(null);
   const { API_URL, user } = useAuth();
+
+  const toggleSolutionExpand = (tokenId) => {
+    setExpandedSolutions(prev => ({
+      ...prev,
+      [tokenId]: !prev[tokenId]
+    }));
+  };
+
+  const copySolution = async (tokenId, solution) => {
+    try {
+      await navigator.clipboard.writeText(solution);
+      setCopiedSolutionId(tokenId);
+      setTimeout(() => setCopiedSolutionId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy solution:', err);
+    }
+  };
+
+  const getFilteredAndSortedSolutions = () => {
+    let solutions = tokens.filter(t => t.status === 'resolved' && t.solution);
+    
+    if (searchQuery) {
+      solutions = solutions.filter(t => 
+        t.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.solution?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    if (filters.department !== 'all') {
+      solutions = solutions.filter(t => t.department?._id === filters.department);
+    }
+    
+    if (solutionCategoryFilter !== 'all') {
+      solutions = solutions.filter(t => t.category === solutionCategoryFilter);
+    }
+    
+    if (solutionPriorityFilter !== 'all') {
+      solutions = solutions.filter(t => t.priority === solutionPriorityFilter);
+    }
+    
+    solutions.sort((a, b) => {
+      let comparison = 0;
+      switch (solutionSortBy) {
+        case 'date':
+          comparison = new Date(b.solvedAt || b.updatedAt) - new Date(a.solvedAt || a.updatedAt);
+          break;
+        case 'rating':
+          comparison = (b.feedback?.rating || 0) - (a.feedback?.rating || 0);
+          break;
+        case 'time':
+          comparison = (a.timeToSolve || Infinity) - (b.timeToSolve || Infinity);
+          break;
+        case 'title':
+          comparison = (a.title || '').localeCompare(b.title || '');
+          break;
+        default:
+          comparison = 0;
+      }
+      return solutionSortOrder === 'desc' ? comparison : -comparison;
+    });
+    
+    return solutions;
+  };
+
+  const getResolutionTime = (token) => {
+    if (token.timeToSolve) return token.timeToSolve;
+    if (token.solvedAt && token.createdAt) {
+      return new Date(token.solvedAt) - new Date(token.createdAt);
+    }
+    return null;
+  };
+
+  const getSolutionStats = () => {
+    const solutions = tokens.filter(t => t.status === 'resolved' && t.solution);
+    
+    const solutionsWithRating = solutions.filter(t => t.feedback?.rating);
+    const reviewsCount = solutionsWithRating.length;
+    const avgRating = reviewsCount > 0 
+      ? solutionsWithRating.reduce((sum, t) => sum + t.feedback.rating, 0) / reviewsCount 
+      : 0;
+    
+    const solutionsWithTime = solutions.map(t => ({
+      ...t,
+      calculatedTime: getResolutionTime(t)
+    })).filter(t => t.calculatedTime !== null && t.calculatedTime > 0);
+    
+    const avgTime = solutionsWithTime.length > 0
+      ? solutionsWithTime.reduce((sum, t) => sum + t.calculatedTime, 0) / solutionsWithTime.length
+      : 0;
+    
+    const fastestTime = solutionsWithTime.length > 0
+      ? Math.min(...solutionsWithTime.map(t => t.calculatedTime))
+      : 0;
+    
+    const slowestTime = solutionsWithTime.length > 0
+      ? Math.max(...solutionsWithTime.map(t => t.calculatedTime))
+      : 0;
+    
+    const categories = [...new Set(solutions.map(t => t.category).filter(Boolean))];
+    
+    return { 
+      total: solutions.length, 
+      avgRating, 
+      avgTime, 
+      categories, 
+      reviewsCount,
+      fastestTime,
+      slowestTime,
+      solutionsWithTimeCount: solutionsWithTime.length
+    };
+  };
 
   useEffect(() => {
     fetchData();
@@ -523,20 +642,85 @@ const AdminDashboard = () => {
         {/* Solution Directory Tab */}
         {activeTab === 'solutions' && (
           <div className="space-y-6">
+            {/* Solution Stats Cards */}
+            {(() => {
+              const solutionStats = getSolutionStats();
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 backdrop-blur-xl rounded-2xl p-4 border border-green-500/30">
+                    <div className="flex items-center gap-3">
+                      <div className="text-green-400 text-2xl">📚</div>
+                      <div>
+                        <div className="text-2xl font-bold text-white">{solutionStats.total}</div>
+                        <div className="text-green-300/70 text-sm">Total Solutions</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 backdrop-blur-xl rounded-2xl p-4 border border-yellow-500/30">
+                    <div className="flex items-center gap-3">
+                      <div className="text-yellow-400 text-2xl">⭐</div>
+                      <div>
+                        <div className="text-2xl font-bold text-white">{solutionStats.avgRating.toFixed(1)}</div>
+                        <div className="text-yellow-300/70 text-sm">Avg Rating</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/30">
+                    <div className="flex items-center gap-3">
+                      <div className="text-purple-400 text-2xl">⚡</div>
+                      <div>
+                        <div className="text-2xl font-bold text-white">{formatTime(solutionStats.avgTime)}</div>
+                        <div className="text-purple-300/70 text-sm">Avg Resolution</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 backdrop-blur-xl rounded-2xl p-4 border border-blue-500/30">
+                    <div className="flex items-center gap-3">
+                      <div className="text-blue-400 text-2xl">🏷️</div>
+                      <div>
+                        <div className="text-2xl font-bold text-white">{solutionStats.categories.length}</div>
+                        <div className="text-blue-300/70 text-sm">Categories</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                <div>
-                  <h3 className="text-2xl font-bold text-white">💡 Solution Directory</h3>
-                  <p className="text-white/60 text-sm mt-1">Browse resolved tickets with detailed solutions</p>
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white">💡 Solution Directory</h3>
+                    <p className="text-white/60 text-sm mt-1">Browse resolved tickets with detailed solutions</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSolutionViewMode('detailed')}
+                      className={`px-3 py-2 rounded-lg transition-all ${solutionViewMode === 'detailed' ? 'bg-[#ED1B2F] text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                      title="Detailed View"
+                    >
+                      📋
+                    </button>
+                    <button
+                      onClick={() => setSolutionViewMode('compact')}
+                      className={`px-3 py-2 rounded-lg transition-all ${solutionViewMode === 'compact' ? 'bg-[#ED1B2F] text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                      title="Compact View"
+                    >
+                      📝
+                    </button>
+                  </div>
                 </div>
 
+                {/* Filters Row */}
                 <div className="flex flex-wrap gap-3">
                   <input
                     type="text"
                     placeholder="Search solutions..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] flex-1 min-w-[200px]"
                   />
                   <select
                     value={filters.department}
@@ -548,109 +732,195 @@ const AdminDashboard = () => {
                       <option key={dept._id} value={dept._id} className="text-gray-900">{dept.name}</option>
                     ))}
                   </select>
+                  <select
+                    value={solutionCategoryFilter}
+                    onChange={(e) => setSolutionCategoryFilter(e.target.value)}
+                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                  >
+                    <option value="all" className="text-gray-900">All Categories</option>
+                    {getSolutionStats().categories.map(cat => (
+                      <option key={cat} value={cat} className="text-gray-900">{cat}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={solutionPriorityFilter}
+                    onChange={(e) => setSolutionPriorityFilter(e.target.value)}
+                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                  >
+                    <option value="all" className="text-gray-900">All Priorities</option>
+                    <option value="high" className="text-gray-900">High Priority</option>
+                    <option value="medium" className="text-gray-900">Medium Priority</option>
+                    <option value="low" className="text-gray-900">Low Priority</option>
+                  </select>
+                </div>
+
+                {/* Sort Controls */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-white/60 text-sm">Sort by:</span>
+                  <div className="flex gap-2">
+                    {[
+                      { id: 'date', label: 'Date', icon: '📅' },
+                      { id: 'rating', label: 'Rating', icon: '⭐' },
+                      { id: 'time', label: 'Resolution Time', icon: '⏱️' },
+                      { id: 'title', label: 'Title', icon: '🔤' }
+                    ].map(sort => (
+                      <button
+                        key={sort.id}
+                        onClick={() => {
+                          if (solutionSortBy === sort.id) {
+                            setSolutionSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setSolutionSortBy(sort.id);
+                            setSolutionSortOrder('desc');
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-sm transition-all flex items-center gap-1 ${
+                          solutionSortBy === sort.id
+                            ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white'
+                            : 'bg-white/10 text-white/60 hover:bg-white/20'
+                        }`}
+                      >
+                        <span>{sort.icon}</span>
+                        <span>{sort.label}</span>
+                        {solutionSortBy === sort.id && (
+                          <span className="ml-1">{solutionSortOrder === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
               {/* Solution Cards */}
               <div className="space-y-4">
-                {tokens
-                  .filter(t => t.status === 'resolved' && t.solution)
-                  .filter(t => 
-                    (!searchQuery || 
-                    t.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    t.solution?.toLowerCase().includes(searchQuery.toLowerCase())) &&
-                    (filters.department === 'all' || t.department?._id === filters.department)
-                  )
-                  .map(token => (
-                    <div key={token._id} className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20 hover:border-green-500/50 transition-all">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h4 className="text-xl font-bold text-white">{token.title}</h4>
-                            <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-semibold border border-green-500/50">
-                              ✓ RESOLVED
+                {getFilteredAndSortedSolutions().map(token => (
+                  <div key={token._id} className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20 hover:border-green-500/50 transition-all">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <h4 className="text-xl font-bold text-white">{token.title}</h4>
+                          <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-semibold border border-green-500/50">
+                            ✓ RESOLVED
+                          </span>
+                          {token.feedback?.rating && (
+                            <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-xs font-semibold border border-yellow-500/50 flex items-center gap-1">
+                              ⭐ {token.feedback.rating}/5
                             </span>
-                          </div>
-                          <div className="flex flex-wrap gap-2 text-sm text-white/60 mb-3">
-                            <span className="bg-white/10 px-2 py-1 rounded">#{token.tokenNumber || token._id.slice(-8)}</span>
-                            {token.department && (
-                              <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded">{token.department.name}</span>
-                            )}
-                            {token.category && (
-                              <span className="bg-purple-500/20 text-purple-400 px-2 py-1 rounded">{token.category}</span>
-                            )}
-                          </div>
+                          )}
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getPriorityColor(token.priority)}`}>
+                            {token.priority?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-sm text-white/60 mb-3">
+                          <span className="bg-white/10 px-2 py-1 rounded">#{token.tokenNumber || token._id.slice(-8)}</span>
+                          {token.department && (
+                            <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded">{token.department.name}</span>
+                          )}
+                          {token.category && (
+                            <span className="bg-purple-500/20 text-purple-400 px-2 py-1 rounded">{token.category}</span>
+                          )}
+                          {token.subCategory && (
+                            <span className="bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded">{token.subCategory}</span>
+                          )}
                         </div>
                       </div>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Problem Section */}
-                        <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/30">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-2xl">❗</span>
-                            <h5 className="text-lg font-bold text-red-400">Problem</h5>
-                          </div>
-                          <p className="text-white/90 leading-relaxed mb-3">{token.description}</p>
-                          <div className="flex items-center gap-2 text-sm text-white/60">
-                            <span>Reported by:</span>
-                            <span className="text-white font-semibold">{token.createdBy?.name}</span>
-                          </div>
-                        </div>
-
-                        {/* Solution Section */}
-                        <div className="bg-green-500/10 rounded-xl p-4 border border-green-500/30">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-2xl">✅</span>
-                            <h5 className="text-lg font-bold text-green-400">Solution</h5>
-                          </div>
-                          <p className="text-white/90 leading-relaxed mb-3">{token.solution}</p>
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm">
-                              <span className="text-white/60">Solved by:</span>
-                              <span className="text-green-400 font-semibold">{token.solvedBy?.name}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                              <span className="text-white/60">Resolution Time:</span>
-                              <span className="text-purple-400 font-semibold">
-                                {token.timeToSolve ? formatTime(token.timeToSolve) : 'N/A'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                              <span className="text-white/60">Resolved:</span>
-                              <span className="text-white/80 font-semibold">
-                                {token.solvedAt ? new Date(token.solvedAt).toLocaleDateString() : 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => copySolution(token._id, token.solution)}
+                          className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-lg transition-all text-sm"
+                          title="Copy Solution"
+                        >
+                          {copiedSolutionId === token._id ? '✓ Copied!' : '📋 Copy'}
+                        </button>
+                        {solutionViewMode === 'compact' && (
+                          <button
+                            onClick={() => toggleSolutionExpand(token._id)}
+                            className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white/60 hover:text-white rounded-lg transition-all text-sm"
+                          >
+                            {expandedSolutions[token._id] ? '▲ Collapse' : '▼ Expand'}
+                          </button>
+                        )}
                       </div>
-
-                      {/* Feedback if available */}
-                      {token.feedback?.rating && (
-                        <div className="mt-4 bg-yellow-500/10 rounded-xl p-4 border border-yellow-500/30">
-                          <div className="flex items-center gap-3">
-                            <span className="text-lg">⭐</span>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-yellow-400 font-bold">{token.feedback.rating}/5</span>
-                                <span className="text-white/60 text-sm">User Rating</span>
-                              </div>
-                              {token.feedback.comment && (
-                                <p className="text-white/80 text-sm italic">"{token.feedback.comment}"</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
-                  ))}
 
-                {tokens.filter(t => t.status === 'resolved' && t.solution).length === 0 && (
+                    {(solutionViewMode === 'detailed' || expandedSolutions[token._id]) && (
+                      <>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {/* Problem Section */}
+                          <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/30">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-2xl">❗</span>
+                              <h5 className="text-lg font-bold text-red-400">Problem</h5>
+                            </div>
+                            <p className="text-white/90 leading-relaxed mb-3">{token.description}</p>
+                            <div className="flex items-center gap-2 text-sm text-white/60">
+                              <span>Reported by:</span>
+                              <span className="text-white font-semibold">{token.createdBy?.name}</span>
+                            </div>
+                          </div>
+
+                          {/* Solution Section */}
+                          <div className="bg-green-500/10 rounded-xl p-4 border border-green-500/30">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-2xl">✅</span>
+                              <h5 className="text-lg font-bold text-green-400">Solution</h5>
+                            </div>
+                            <p className="text-white/90 leading-relaxed mb-3">{token.solution}</p>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-white/60">Solved by:</span>
+                                <span className="text-green-400 font-semibold">{token.solvedBy?.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-white/60">Resolution Time:</span>
+                                <span className="text-purple-400 font-semibold">
+                                  {token.timeToSolve ? formatTime(token.timeToSolve) : 'N/A'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-white/60">Resolved:</span>
+                                <span className="text-white/80 font-semibold">
+                                  {token.solvedAt ? new Date(token.solvedAt).toLocaleDateString() : 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Feedback if available */}
+                        {token.feedback?.rating && (
+                          <div className="mt-4 bg-yellow-500/10 rounded-xl p-4 border border-yellow-500/30">
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">⭐</span>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-yellow-400 font-bold">{token.feedback.rating}/5</span>
+                                  <span className="text-white/60 text-sm">User Rating</span>
+                                </div>
+                                {token.feedback.comment && (
+                                  <p className="text-white/80 text-sm italic">"{token.feedback.comment}"</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {solutionViewMode === 'compact' && !expandedSolutions[token._id] && (
+                      <div className="text-white/70 text-sm">
+                        <span className="text-white/50">Solution: </span>
+                        {token.solution?.slice(0, 150)}{token.solution?.length > 150 ? '...' : ''}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {getFilteredAndSortedSolutions().length === 0 && (
                   <div className="text-center py-16 bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10">
                     <div className="text-6xl mb-4">📚</div>
-                    <h3 className="text-2xl font-bold text-white/80 mb-2">No Solutions Yet</h3>
-                    <p className="text-white/60">Resolved tickets with solutions will appear here</p>
+                    <h3 className="text-2xl font-bold text-white/80 mb-2">No Solutions Found</h3>
+                    <p className="text-white/60">Try adjusting your filters or search query</p>
                   </div>
                 )}
               </div>

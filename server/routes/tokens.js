@@ -359,7 +359,7 @@ router.patch('/:id/solve', authenticate, authorize('admin', 'superadmin'), valid
     }
 
     const solvedAt = new Date();
-    const timeToSolve = Math.floor((solvedAt - token.createdAt) / 1000 / 60); // Calculate time to solve in minutes
+    const timeToSolve = solvedAt - new Date(token.createdAt); // Calculate time to solve in milliseconds
 
     token.status = 'resolved';
     token.solvedBy = req.user._id;
@@ -368,6 +368,8 @@ router.patch('/:id/solve', authenticate, authorize('admin', 'superadmin'), valid
 
     await token.save();
     await token.populate(['createdBy', 'assignedTo', 'solvedBy', 'department']); // Repopulate after save
+
+    console.log(`Time to solve for token ${token.tokenNumber}: ${timeToSolve}ms`);
 
     res.json(token);
   } catch (error) {
@@ -442,7 +444,10 @@ router.patch('/:id/update', authenticate, authorize('admin', 'superadmin'), vali
       updateData.solvedAt = new Date();
       const token = await Token.findById(req.params.id); // Fetch token to calculate time difference
       if (token) {
-        updateData.timeToSolve = Math.floor((new Date() - token.createdAt) / 1000 / 60);
+        // Calculate time difference in milliseconds
+        const timeInMs = new Date() - new Date(token.createdAt);
+        updateData.timeToSolve = timeInMs; // Store in milliseconds
+        console.log(`Time to solve for token ${token.tokenNumber}: ${timeInMs}ms`);
       }
     }
 

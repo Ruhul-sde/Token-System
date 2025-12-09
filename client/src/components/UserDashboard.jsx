@@ -14,18 +14,18 @@ const Header3D = () => {
         setWebglSupported(false);
         return;
       }
-      
+
       Promise.all([
         import('@react-three/fiber'),
         import('@react-three/drei')
       ]).then(([fiber, drei]) => {
-        setThreeComponents({ 
-          Canvas: fiber.Canvas, 
-          OrbitControls: drei.OrbitControls, 
-          Sphere: drei.Sphere, 
-          Box: drei.Box, 
-          Float: drei.Float, 
-          MeshDistortMaterial: drei.MeshDistortMaterial 
+        setThreeComponents({
+          Canvas: fiber.Canvas,
+          OrbitControls: drei.OrbitControls,
+          Sphere: drei.Sphere,
+          Box: drei.Box,
+          Float: drei.Float,
+          MeshDistortMaterial: drei.MeshDistortMaterial
         });
       }).catch(() => setWebglSupported(false));
     } catch {
@@ -108,25 +108,25 @@ const UserDashboard = () => {
   const createToken = async (e) => {
     e.preventDefault();
     setCreateError(null);
-    
+
     try {
       // Validate that department is selected
       if (!formData.department) {
         setCreateError('Please select a department');
         return;
       }
-      
+
       // Validate title and description
       if (!formData.title || formData.title.trim().length < 3) {
         setCreateError('Title must be at least 3 characters');
         return;
       }
-      
+
       if (!formData.description || formData.description.trim().length < 10) {
         setCreateError('Description must be at least 10 characters');
         return;
       }
-      
+
       const payload = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -134,7 +134,7 @@ const UserDashboard = () => {
         department: formData.department,
         category: formData.category || undefined,
       };
-      
+
       await axios.post(`${API_URL}/tokens`, payload);
       setFormData({ title: '', description: '', priority: 'medium', department: '', category: '' });
       setShowCreateForm(false);
@@ -151,11 +151,11 @@ const UserDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       const config = {
-        headers: { 
-          'Authorization': `Bearer ${token}` 
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
       };
-      
+
       await axios.post(`${API_URL}/tokens/${selectedToken._id}/feedback`, feedback, config);
       setShowModal(false);
       setFeedback({ rating: 5, comment: '' });
@@ -177,9 +177,27 @@ const UserDashboard = () => {
     }
   };
 
+  const formatTime = (milliseconds) => {
+    if (!milliseconds || milliseconds === 0) return '0m';
+    
+    const totalMinutes = Math.floor(milliseconds / (1000 * 60));
+    const totalHours = Math.floor(totalMinutes / 60);
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    const minutes = totalMinutes % 60;
+
+    if (days > 0) {
+      return `${days}d ${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  };
+
   const selectedDepartment = departments.find(d => d._id === formData.department);
   const availableCategories = selectedDepartment?.categories || [];
-  
+
   useEffect(() => {
     if (error) {
       console.error('Dashboard error:', error);
@@ -187,7 +205,7 @@ const UserDashboard = () => {
       return () => clearTimeout(timer);
     }
   }, [error]);
-  
+
   useEffect(() => {
     if (createError) {
       const timer = setTimeout(() => setCreateError(null), 5000);
@@ -448,14 +466,25 @@ const UserDashboard = () => {
                         <span className="text-green-400 font-semibold ml-2">{new Date(selectedToken.solvedAt).toLocaleString()}</span>
                       </div>
                     )}
-                    {selectedToken.timeToSolve && (
-                      <div>
-                        <span className="text-white/60">Time to Resolve:</span>
-                        <span className="text-purple-400 font-semibold ml-2">
-                          {Math.floor(selectedToken.timeToSolve / 60)}h {selectedToken.timeToSolve % 60}m
-                        </span>
-                      </div>
-                    )}
+                    <div>
+                      <span className="text-white/60">Time to Resolve:</span>
+                      <span className="text-purple-400 font-semibold ml-2">
+                        {(() => {
+                          let timeInMs = selectedToken.timeToSolve;
+
+                          // Fallback: calculate from createdAt and solvedAt if timeToSolve not available
+                          if (!timeInMs && selectedToken.solvedAt && selectedToken.createdAt) {
+                            timeInMs = new Date(selectedToken.solvedAt) - new Date(selectedToken.createdAt);
+                          }
+
+                          if (timeInMs && timeInMs > 0) {
+                            return formatTime(timeInMs);
+                          }
+
+                          return selectedToken.status === 'resolved' ? 'N/A' : 'Pending';
+                        })()}
+                      </span>
+                    </div>
                     {selectedToken.assignedTo && (
                       <div>
                         <span className="text-white/60">Assigned to:</span>
@@ -532,7 +561,7 @@ const UserDashboard = () => {
                     {selectedToken.feedback.comment && (
                       <p className="text-white/80 text-sm">{selectedToken.feedback.comment}</p>
                     )}
-                     <p className="text-white/50 text-xs mt-2">
+                    <p className="text-white/50 text-xs mt-2">
                       Submitted on {new Date(selectedToken.feedback.submittedAt).toLocaleString()}
                     </p>
                   </div>
