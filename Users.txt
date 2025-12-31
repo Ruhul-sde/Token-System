@@ -1,16 +1,12 @@
 Regular Users:
-  Email: john.doe@akshay.com (EMP001)
-  Email: alice.johnson@akshay.com (EMP002)
-  Password: password123
+  Email: rajan@akshay.com (1234)
+  Password: Rajan@1234
 
 Admins:
-  Email: admin.it@akshay.com (ADM001) - IT Support
-  Email: admin.hr@akshay.com (ADM002) - Human Resources
-  Email: admin.finance@akshay.com (ADM003) - Finance
-  Password: password123
+  Email: ruhul7407@akshay.com
+  Password: Ruhul@astl
 
 Super Admins:
-  Email: superadmin@akshay.com (SA001)
-  Email: director@akshay.com (SA002)
+  Email: ruhul@akshay.com
   Password: password123
 =================================

@@ -70,10 +70,10 @@ const Header3D = () => {
 };
 
 const AdminDashboard = () => {
-  const [tokens, setTokens] = useState([]);
+  const [tickets, settickets] = useState([]);
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [selectedToken, setSelectedToken] = useState(null);
+  const [selectedTicket, setselectedTicket] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newToken, setNewToken] = useState({
@@ -84,6 +84,7 @@ const AdminDashboard = () => {
     category: '',
     subCategory: '',
     reason: '',
+    supportingDocuments: [],
     userDetails: {
       name: '',
       email: '',
@@ -91,16 +92,65 @@ const AdminDashboard = () => {
       companyName: ''
     }
   });
+
+  const handleAdminFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    const validFiles = files.filter(file => {
+      const isImage = file.type.startsWith('image/');
+      const isPDF = file.type === 'application/pdf';
+      const isValidSize = file.size <= 5 * 1024 * 1024;
+      
+      if (!isValidSize) {
+        alert(`File ${file.name} exceeds 5MB limit`);
+        return false;
+      }
+      
+      if (!isImage && !isPDF) {
+        alert(`File ${file.name} must be an image or PDF`);
+        return false;
+      }
+      
+      return true;
+    });
+
+    const filePromises = validFiles.map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          resolve({
+            filename: file.name,
+            fileType: file.type.startsWith('image/') ? 'image' : 'pdf',
+            base64Data: e.target.result,
+            uploadedAt: new Date()
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    const uploadedFiles = await Promise.all(filePromises);
+    setNewToken(prev => ({
+      ...prev,
+      supportingDocuments: [...prev.supportingDocuments, ...uploadedFiles]
+    }));
+  };
+
+  const removeAdminFile = (index) => {
+    setNewToken(prev => ({
+      ...prev,
+      supportingDocuments: prev.supportingDocuments.filter((_, i) => i !== index)
+    }));
+  };
   const [stats, setStats] = useState(null);
   const [filters, setFilters] = useState({
     status: 'all',
     priority: 'all',
     department: 'all'
   });
-  const [filteredTokens, setFilteredTokens] = useState([]);
+  const [filteredtickets, setFilteredtickets] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('tokens');
+  const [activeTab, setActiveTab] = useState('tickets');
   const [searchQuery, setSearchQuery] = useState('');
   const [solutionSortBy, setSolutionSortBy] = useState('date');
   const [solutionSortOrder, setSolutionSortOrder] = useState('desc');
@@ -129,7 +179,7 @@ const AdminDashboard = () => {
   };
 
   const getFilteredAndSortedSolutions = () => {
-    let solutions = tokens.filter(t => t.status === 'resolved' && t.solution);
+    let solutions = tickets.filter(t => t.status === 'resolved' && t.solution);
     
     if (searchQuery) {
       solutions = solutions.filter(t => 
@@ -184,7 +234,7 @@ const AdminDashboard = () => {
   };
 
   const getSolutionStats = () => {
-    const solutions = tokens.filter(t => t.status === 'resolved' && t.solution);
+    const solutions = tickets.filter(t => t.status === 'resolved' && t.solution);
     
     const solutionsWithRating = solutions.filter(t => t.feedback?.rating);
     const reviewsCount = solutionsWithRating.length;
@@ -228,7 +278,7 @@ const AdminDashboard = () => {
   }, []);
 
   useEffect(() => {
-    let filtered = tokens;
+    let filtered = tickets;
 
     if (filters.status !== 'all') {
       filtered = filtered.filter(t => t.status === filters.status);
@@ -242,8 +292,8 @@ const AdminDashboard = () => {
       filtered = filtered.filter(t => t.department?._id === filters.department);
     }
 
-    setFilteredTokens(filtered);
-  }, [filters, tokens]);
+    setFilteredtickets(filtered);
+  }, [filters, tickets]);
 
   const fetchData = async () => {
     try {
@@ -251,7 +301,7 @@ const AdminDashboard = () => {
       setError(null);
       const token = localStorage.getItem('token');
       console.log('===== ADMIN DASHBOARD FETCH =====');
-      console.log('Fetching tokens from:', `${API_URL}/tokens`);
+      console.log('Fetching tickets from:', `${API_URL}/tickets`);
       console.log('Auth token present:', !!token);
       console.log('User role:', user?.role);
       console.log('User department:', user?.department);
@@ -266,24 +316,24 @@ const AdminDashboard = () => {
         }
       };
 
-      const [tokensRes, usersRes, deptsRes, statsRes] = await Promise.all([
-        axios.get(`${API_URL}/tokens`, config),
+      const [ticketsRes, usersRes, deptsRes, statsRes] = await Promise.all([
+        axios.get(`${API_URL}/tickets`, config),
         axios.get(`${API_URL}/users`, config),
         axios.get(`${API_URL}/departments`, config),
         axios.get(`${API_URL}/dashboard/stats`, config)
       ]);
 
-      console.log('✓ Tokens received:', tokensRes.data.length);
-      console.log('Sample tokens:', tokensRes.data.slice(0, 2).map(t => ({
+      console.log('✓ tickets received:', ticketsRes.data.length);
+      console.log('Sample tickets:', ticketsRes.data.slice(0, 2).map(t => ({
         id: t._id.slice(-6),
-        number: t.tokenNumber,
+        number: t.ticketNumber,
         title: t.title,
         dept: t.department?.name
       })));
       console.log('=================================');
 
-      setTokens(tokensRes.data);
-      setFilteredTokens(tokensRes.data);
+      settickets(ticketsRes.data);
+      setFilteredtickets(ticketsRes.data);
       setUsers(usersRes.data);
       setDepartments(deptsRes.data);
       setStats(statsRes.data);
@@ -298,20 +348,20 @@ const AdminDashboard = () => {
 
   const assignToken = async (tokenId, assignedTo, department) => {
     try {
-      await axios.patch(`${API_URL}/tokens/${tokenId}/assign`, { assignedTo, department });
+      await axios.patch(`${API_URL}/tickets/${tokenId}/assign`, { assignedTo, department });
       fetchData();
     } catch (error) {
       console.error('Error assigning token:', error);
     }
   };
 
-  const updateTokenStatus = async (tokenId, status, solution = null) => {
+  const updateticketstatus = async (tokenId, status, solution = null) => {
     try {
       const updateData = { status };
       if (solution) {
         updateData.solution = solution;
       }
-      await axios.patch(`${API_URL}/tokens/${tokenId}/update`, updateData);
+      await axios.patch(`${API_URL}/tickets/${tokenId}/update`, updateData);
       fetchData();
       setShowModal(false);
     } catch (error) {
@@ -329,13 +379,13 @@ const AdminDashboard = () => {
         }
       };
       
-      await axios.post(`${API_URL}/tokens/${tokenId}/remarks`, { text }, config);
+      await axios.post(`${API_URL}/tickets/${tokenId}/remarks`, { text }, config);
       
       // Refresh the selected token to show new remark
-      const updatedTokenRes = await axios.get(`${API_URL}/tokens/${tokenId}`, config);
-      setSelectedToken(updatedTokenRes.data);
+      const updatedTokenRes = await axios.get(`${API_URL}/tickets/${tokenId}`, config);
+      setselectedTicket(updatedTokenRes.data);
       
-      // Refresh all tokens
+      // Refresh all tickets
       fetchData();
     } catch (error) {
       console.error('Error adding remark:', error);
@@ -353,7 +403,7 @@ const AdminDashboard = () => {
         }
       };
       
-      await axios.post(`${API_URL}/tokens/on-behalf`, newToken, config);
+      await axios.post(`${API_URL}/tickets/on-behalf`, newToken, config);
       
       setShowCreateModal(false);
       setNewToken({
@@ -364,6 +414,7 @@ const AdminDashboard = () => {
         category: '',
         subCategory: '',
         reason: '',
+        supportingDocuments: [],
         userDetails: {
           name: '',
           email: '',
@@ -418,12 +469,12 @@ const AdminDashboard = () => {
   };
 
   const departmentStats = departments.map(dept => {
-    const deptTokens = tokens.filter(t => t.department?._id === dept._id);
+    const depttickets = tickets.filter(t => t.department?._id === dept._id);
     return {
       name: dept.name,
-      total: deptTokens.length,
-      solved: deptTokens.filter(t => t.status === 'resolved').length,
-      pending: deptTokens.filter(t => t.status === 'pending').length
+      total: depttickets.length,
+      solved: depttickets.filter(t => t.status === 'resolved').length,
+      pending: depttickets.filter(t => t.status === 'pending').length
     };
   });
 
@@ -483,20 +534,20 @@ const AdminDashboard = () => {
         {stats && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-              <h3 className="text-white/60 text-sm mb-2">Total Tokens</h3>
-              <p className="text-3xl font-bold text-white">{stats.overview.totalTokens}</p>
+              <h3 className="text-white/60 text-sm mb-2">Total tickets</h3>
+              <p className="text-3xl font-bold text-white">{stats.overview.totaltickets}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
               <h3 className="text-white/60 text-sm mb-2">Pending</h3>
-              <p className="text-3xl font-bold text-yellow-400">{stats.overview.pendingTokens}</p>
+              <p className="text-3xl font-bold text-yellow-400">{stats.overview.pendingtickets}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
               <h3 className="text-white/60 text-sm mb-2">Assigned</h3>
-              <p className="text-3xl font-bold text-blue-400">{stats.overview.assignedTokens}</p>
+              <p className="text-3xl font-bold text-blue-400">{stats.overview.assignedtickets}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
               <h3 className="text-white/60 text-sm mb-2">Resolved</h3>
-              <p className="text-3xl font-bold text-green-400">{stats.overview.resolvedTokens || 0}</p>
+              <p className="text-3xl font-bold text-green-400">{stats.overview.resolvedtickets || 0}</p>
             </div>
           </div>
         )}
@@ -521,7 +572,7 @@ const AdminDashboard = () => {
         {/* Navigation Tabs */}
         <div className="mb-8 flex gap-2 overflow-x-auto pb-2">
           {[
-            { id: 'tokens', icon: '🎫', label: 'All Tickets' },
+            { id: 'tickets', icon: '🎫', label: 'All Tickets' },
             { id: 'solutions', icon: '💡', label: 'Solution Directory' }
           ].map(tab => (
             <button
@@ -529,7 +580,7 @@ const AdminDashboard = () => {
               onClick={() => setActiveTab(tab.id)}
               className={`px-6 py-3 rounded-xl transition-all whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white shadow-lg transform scale-105'
+                  ? '`bg-linear-to-r from-[#ED1B2F] to-[#455185] text-white shadow-lg transform scale-105'
                   : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
               }`}
             >
@@ -540,10 +591,10 @@ const AdminDashboard = () => {
         </div>
 
         {/* All Tickets Tab */}
-        {activeTab === 'tokens' && (
+        {activeTab === 'tickets' && (
           <>
             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 mb-8">
-              <h3 className="text-xl font-bold text-white mb-4">Filter Tokens</h3>
+              <h3 className="text-xl font-bold text-white mb-4">Filter tickets</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <select
                   value={filters.status}
@@ -582,18 +633,18 @@ const AdminDashboard = () => {
             </div>
 
             <div className="grid gap-6">
-          {filteredTokens.length === 0 ? (
+          {filteredtickets.length === 0 ? (
             <div className="text-center py-16 bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10">
               <div className="text-6xl mb-4">📭</div>
-              <h3 className="text-2xl font-bold text-white/80 mb-2">No Tokens Found</h3>
-              <p className="text-white/60">No tokens match your current filters</p>
+              <h3 className="text-2xl font-bold text-white/80 mb-2">No tickets Found</h3>
+              <p className="text-white/60">No tickets match your current filters</p>
             </div>
           ) : (
-            filteredTokens.map((token) => (
+            filteredtickets.map((token) => (
               <div
                 key={token._id}
                 className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20 hover:border-[#ED1B2F]/50 hover:shadow-2xl hover:shadow-[#ED1B2F]/20 transition-all duration-300 cursor-pointer"
-                onClick={() => { setSelectedToken(token); setShowModal(true); }}
+                onClick={() => { setselectedTicket(token); setShowModal(true); }}
               >
                 <div className="flex flex-col lg:flex-row gap-4">
                   <div className="flex-1">
@@ -613,7 +664,7 @@ const AdminDashboard = () => {
                         </div>
                         <div className="mb-2">
                           <span className="bg-gradient-to-r from-[#ED1B2F]/20 to-[#455185]/20 text-white px-3 py-1 rounded-lg text-sm font-mono font-bold border border-white/20">
-                            #{token.tokenNumber || token._id.slice(-8)}
+                            #{token.ticketNumber || token._id.slice(-8)}
                           </span>
                         </div>
                         <p className="text-white/70 text-sm mb-2">{token.description}</p>
@@ -812,7 +863,7 @@ const AdminDashboard = () => {
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-2 text-sm text-white/60 mb-3">
-                          <span className="bg-white/10 px-2 py-1 rounded">#{token.tokenNumber || token._id.slice(-8)}</span>
+                          <span className="bg-white/10 px-2 py-1 rounded">#{token.ticketNumber || token._id.slice(-8)}</span>
                           {token.department && (
                             <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded">{token.department.name}</span>
                           )}
@@ -1061,6 +1112,38 @@ const AdminDashboard = () => {
                         rows="2"
                       />
                     </div>
+
+                    <div>
+                      <label className="block text-white/80 text-sm mb-2">Supporting Documents (Images/PDF)</label>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        multiple
+                        onChange={handleAdminFileUpload}
+                        className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#ED1B2F] file:text-white hover:file:bg-[#d41829] focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                      />
+                      <p className="text-white/40 text-xs mt-1">Max 5MB per file. Supported: JPG, PNG, GIF, PDF</p>
+                      
+                      {newToken.supportingDocuments.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {newToken.supportingDocuments.map((doc, index) => (
+                            <div key={index} className="flex items-center justify-between bg-white/5 rounded-lg p-2 border border-white/10">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl">{doc.fileType === 'image' ? '🖼️' : '📄'}</span>
+                                <span className="text-white/80 text-sm truncate max-w-xs">{doc.filename}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeAdminFile(index)}
+                                className="text-red-400 hover:text-red-300 text-sm px-2 py-1"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1084,7 +1167,7 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {showModal && selectedToken && (
+        {showModal && selectedTicket && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
             <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
@@ -1095,48 +1178,48 @@ const AdminDashboard = () => {
               <div className="p-6 space-y-6">
                 <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                   <div className="flex items-center gap-3 mb-4">
-                    <h4 className="text-xl font-bold text-white">{selectedToken.title}</h4>
+                    <h4 className="text-xl font-bold text-white">{selectedTicket.title}</h4>
                     <span className="bg-gradient-to-r from-[#ED1B2F]/20 to-[#455185]/20 text-white px-3 py-1 rounded-lg text-sm font-mono font-bold border border-white/20">
-                      #{selectedToken.tokenNumber || selectedToken._id.slice(-8)}
+                      #{selectedTicket.ticketNumber || selectedTicket._id.slice(-8)}
                     </span>
                   </div>
-                  <p className="text-white/80 mb-4">{selectedToken.description}</p>
+                  <p className="text-white/80 mb-4">{selectedTicket.description}</p>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-white/60">Status:</span>
-                      <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(selectedToken.status)}`}>
-                        {selectedToken.status}
+                      <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(selectedTicket.status)}`}>
+                        {selectedTicket.status}
                       </span>
                     </div>
                     <div>
                       <span className="text-white/60">Priority:</span>
-                      <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold border ${getPriorityColor(selectedToken.priority)}`}>
-                        {selectedToken.priority}
+                      <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold border ${getPriorityColor(selectedTicket.priority)}`}>
+                        {selectedTicket.priority}
                       </span>
                     </div>
                     <div>
                       <span className="text-white/60">Department:</span>
-                      <span className="text-white font-semibold ml-2">{selectedToken.department?.name || 'N/A'}</span>
+                      <span className="text-white font-semibold ml-2">{selectedTicket.department?.name || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-white/60">Created By:</span>
-                      <span className="text-white font-semibold ml-2">{selectedToken.createdBy?.name}</span>
+                      <span className="text-white font-semibold ml-2">{selectedTicket.createdBy?.name}</span>
                     </div>
                     <div>
                       <span className="text-white/60">Started:</span>
-                      <span className="text-white font-semibold ml-2">{new Date(selectedToken.createdAt).toLocaleString()}</span>
+                      <span className="text-white font-semibold ml-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span>
                     </div>
-                    {selectedToken.solvedAt && (
+                    {selectedTicket.solvedAt && (
                       <div>
                         <span className="text-white/60">Resolved:</span>
-                        <span className="text-green-400 font-semibold ml-2">{new Date(selectedToken.solvedAt).toLocaleString()}</span>
+                        <span className="text-green-400 font-semibold ml-2">{new Date(selectedTicket.solvedAt).toLocaleString()}</span>
                       </div>
                     )}
-                    {selectedToken.timeToSolve && (
+                    {selectedTicket.timeToSolve && (
                       <div className="col-span-2">
                         <span className="text-white/60">Time to Resolve:</span>
                         <span className="text-purple-400 font-semibold ml-2">
-                          {formatTime(selectedToken.timeToSolve)}
+                          {formatTime(selectedTicket.timeToSolve)}
                         </span>
                       </div>
                     )}
@@ -1147,9 +1230,9 @@ const AdminDashboard = () => {
                   <h4 className="text-lg font-bold text-white mb-4">Update Status</h4>
                   <div className="space-y-4">
                     <select
-                      id={`statusSelect-${selectedToken._id}`}
+                      id={`statusSelect-${selectedTicket._id}`}
                       className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white"
-                      defaultValue={selectedToken.status}
+                      defaultValue={selectedTicket.status}
                     >
                       <option value="pending" className="text-gray-900">Pending</option>
                       <option value="assigned" className="text-gray-900">Assigned</option>
@@ -1157,10 +1240,10 @@ const AdminDashboard = () => {
                       <option value="resolved" className="text-gray-900">Resolved</option>
                     </select>
 
-                    <div id={`solutionField-${selectedToken._id}`} style={{ display: 'none' }}>
+                    <div id={`solutionField-${selectedTicket._id}`} style={{ display: 'none' }}>
                       <label className="block text-white/80 text-sm mb-2">Solution (Required for Resolved status)</label>
                       <textarea
-                        id={`solutionText-${selectedToken._id}`}
+                        id={`solutionText-${selectedTicket._id}`}
                         className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#455185] min-h-32"
                         placeholder="Describe how you solved this issue..."
                       />
@@ -1168,8 +1251,8 @@ const AdminDashboard = () => {
 
                     <button
                       onClick={async () => {
-                        const statusSelect = document.getElementById(`statusSelect-${selectedToken._id}`);
-                        const solutionText = document.getElementById(`solutionText-${selectedToken._id}`);
+                        const statusSelect = document.getElementById(`statusSelect-${selectedTicket._id}`);
+                        const solutionText = document.getElementById(`solutionText-${selectedTicket._id}`);
                         const newStatus = statusSelect?.value;
                         
                         if (newStatus === 'resolved') {
@@ -1178,9 +1261,9 @@ const AdminDashboard = () => {
                             alert('Please provide a solution (minimum 10 characters) to mark the token as resolved');
                             return;
                           }
-                          await updateTokenStatus(selectedToken._id, newStatus, solution.trim());
+                          await updateticketstatus(selectedTicket._id, newStatus, solution.trim());
                         } else {
-                          await updateTokenStatus(selectedToken._id, newStatus);
+                          await updateticketstatus(selectedTicket._id, newStatus);
                         }
                       }}
                       className="w-full py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01626] text-white rounded-xl font-semibold transition-all"
@@ -1189,8 +1272,8 @@ const AdminDashboard = () => {
                     </button>
                   </div>
                   <script dangerouslySetInnerHTML={{__html: `
-                    const statusSelect = document.getElementById('statusSelect-${selectedToken._id}');
-                    const solutionField = document.getElementById('solutionField-${selectedToken._id}');
+                    const statusSelect = document.getElementById('statusSelect-${selectedTicket._id}');
+                    const solutionField = document.getElementById('solutionField-${selectedTicket._id}');
                     if (statusSelect && solutionField) {
                       statusSelect.addEventListener('change', function() {
                         solutionField.style.display = this.value === 'resolved' ? 'block' : 'none';
@@ -1199,11 +1282,44 @@ const AdminDashboard = () => {
                   `}} />
                 </div>
 
-                {selectedToken.remarks && selectedToken.remarks.length > 0 && (
+                {selectedTicket.supportingDocuments && selectedTicket.supportingDocuments.length > 0 && (
+                  <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
+                    <h4 className="text-lg font-bold text-white mb-4">Supporting Documents</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {selectedTicket.supportingDocuments.map((doc, idx) => (
+                        <div key={idx} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-2xl">{doc.fileType === 'image' ? '🖼️' : '📄'}</span>
+                            <span className="text-white/80 text-sm truncate flex-1">{doc.filename}</span>
+                          </div>
+                          {doc.fileType === 'image' && doc.base64Data && (
+                            <img 
+                              src={doc.base64Data} 
+                              alt={doc.filename}
+                              className="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-80"
+                              onClick={() => window.open(doc.base64Data, '_blank')}
+                            />
+                          )}
+                          {doc.fileType === 'pdf' && doc.base64Data && (
+                            <a
+                              href={doc.base64Data}
+                              download={doc.filename}
+                              className="block w-full py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-center text-sm transition-colors"
+                            >
+                              📥 Download PDF
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedTicket.remarks && selectedTicket.remarks.length > 0 && (
                   <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                     <h4 className="text-lg font-bold text-white mb-4">Remarks</h4>
                     <div className="space-y-3">
-                      {selectedToken.remarks.map((remark, idx) => (
+                      {selectedTicket.remarks.map((remark, idx) => (
                         <div key={idx} className="bg-white/5 rounded-lg p-4 border-l-4 border-[#455185]">
                           <div className="flex justify-between items-start mb-2">
                             <span className="text-white/90 font-semibold text-sm">{remark.addedBy?.name}</span>
@@ -1219,16 +1335,16 @@ const AdminDashboard = () => {
                 <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                   <h4 className="text-lg font-bold text-white mb-4">Add Remark</h4>
                   <textarea
-                    id={`remarkText-${selectedToken._id}`}
+                    id={`remarkText-${selectedTicket._id}`}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#455185] min-h-24"
                     placeholder="Enter your remark..."
                   />
                   <button
                     onClick={async () => {
-                      const textarea = document.getElementById(`remarkText-${selectedToken._id}`);
+                      const textarea = document.getElementById(`remarkText-${selectedTicket._id}`);
                       const text = textarea?.value;
                       if (text && text.trim()) {
-                        await addRemark(selectedToken._id, text.trim());
+                        await addRemark(selectedTicket._id, text.trim());
                         if (textarea) {
                           textarea.value = '';
                         }
@@ -1241,31 +1357,31 @@ const AdminDashboard = () => {
                 </div>
 
                 {/* Solution Display */}
-                {selectedToken.solution && (
+                {selectedTicket.solution && (
                   <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-6 border border-green-500/30">
                     <h4 className="text-lg font-bold text-white mb-3">Solution Provided</h4>
-                    <p className="text-white/90 mb-2">{selectedToken.solution}</p>
-                    {selectedToken.solvedBy && (
+                    <p className="text-white/90 mb-2">{selectedTicket.solution}</p>
+                    {selectedTicket.solvedBy && (
                       <p className="text-white/50 text-xs">
-                        Solved by {selectedToken.solvedBy.name}
+                        Solved by {selectedTicket.solvedBy.name}
                       </p>
                     )}
                   </div>
                 )}
 
                 {/* Feedback Section - Display if feedback exists */}
-                {selectedToken.feedback && (
+                {selectedTicket.feedback && (
                   <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl p-6 border border-purple-500/30">
                     <h4 className="text-lg font-bold text-white mb-3">User Feedback</h4>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-yellow-400 text-xl">{'⭐'.repeat(selectedToken.feedback.rating)}</span>
-                      <span className="text-white/60 text-sm">({selectedToken.feedback.rating}/5)</span>
+                      <span className="text-yellow-400 text-xl">{'⭐'.repeat(selectedTicket.feedback.rating)}</span>
+                      <span className="text-white/60 text-sm">({selectedTicket.feedback.rating}/5)</span>
                     </div>
-                    {selectedToken.feedback.comment && (
-                      <p className="text-white/80 text-sm mb-2">{selectedToken.feedback.comment}</p>
+                    {selectedTicket.feedback.comment && (
+                      <p className="text-white/80 text-sm mb-2">{selectedTicket.feedback.comment}</p>
                     )}
                     <p className="text-white/50 text-xs">
-                      Submitted on {new Date(selectedToken.feedback.submittedAt).toLocaleString()}
+                      Submitted on {new Date(selectedTicket.feedback.submittedAt).toLocaleString()}
                     </p>
                   </div>
                 )}

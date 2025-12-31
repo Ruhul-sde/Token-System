@@ -1,210 +1,29 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Sphere, MeshDistortMaterial, Float } from '@react-three/drei';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid,
-  PolarAngleAxis, PolarRadiusAxis, Radar
-} from 'recharts';
-
-// ==============================================
-// SUB-COMPONENTS
-// ==============================================
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ComposedChart } from 'recharts';
 
 const AnimatedSphere = ({ color, position }) => (
   <Float speed={2.5} rotationIntensity={1.5} floatIntensity={2}>
     <Sphere args={[0.5, 64, 64]} position={position}>
-      <MeshDistortMaterial 
-        color={color} 
-        roughness={0.2} 
-        metalness={0.9} 
-        distort={0.4} 
-        speed={2} 
-      />
+      <MeshDistortMaterial color={color} roughness={0.2} metalness={0.9} distort={0.4} speed={2} />
     </Sphere>
   </Float>
 );
-
-const AnimatedCounter = ({ value, duration = 1000, prefix = '', suffix = '', decimals = 0 }) => {
-  const [displayValue, setDisplayValue] = useState(0);
-  const previousValue = useRef(0);
-  
-  useEffect(() => {
-    const startValue = previousValue.current;
-    const endValue = typeof value === 'number' ? value : parseFloat(value) || 0;
-    const startTime = Date.now();
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
-      const current = startValue + (endValue - startValue) * easeOutQuart;
-      
-      setDisplayValue(current);
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        previousValue.current = endValue;
-      }
-    };
-    
-    requestAnimationFrame(animate);
-  }, [value, duration]);
-  
-  return (
-    <span>
-      {prefix}{displayValue.toFixed(decimals)}{suffix}
-    </span>
-  );
-};
-
-const TrendIndicator = ({ current, previous, suffix = '', invertColors = false }) => {
-  if (!previous || previous === 0) return null;
-  
-  const change = ((current - previous) / previous) * 100;
-  const isPositive = change > 0;
-  const isGood = invertColors ? !isPositive : isPositive;
-  
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-      isGood ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-    }`}>
-      <span className="text-sm">{isPositive ? '↑' : '↓'}</span>
-      {Math.abs(change).toFixed(1)}{suffix}
-    </span>
-  );
-};
-
-const MiniSparkline = ({ data, color = '#00C49F', height = 30 }) => {
-  if (!data || data.length < 2) return null;
-  
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  
-  const points = data.map((value, index) => {
-    const x = (index / (data.length - 1)) * 100;
-    const y = height - ((value - min) / range) * height;
-    return `${x},${y}`;
-  }).join(' ');
-  
-  return (
-    <svg width="100" height={height} className="opacity-60">
-      <polyline
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        points={points}
-      />
-    </svg>
-  );
-};
-
-const PulsingDot = ({ color = 'green' }) => {
-  const colorMap = {
-    green: 'bg-green-400',
-    red: 'bg-red-400',
-    purple: 'bg-purple-400',
-    blue: 'bg-blue-400',
-    yellow: 'bg-yellow-400'
-  };
-
-  return (
-    <span className="relative flex h-3 w-3">
-      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${colorMap[color]} opacity-75`}></span>
-      <span className={`relative inline-flex rounded-full h-3 w-3 ${colorMap[color]}`}></span>
-    </span>
-  );
-};
-
-const SystemHealthScore = ({ score, label }) => {
-  const getHealthColor = (score) => {
-    if (score >= 80) return { bg: 'from-green-500/20 to-green-600/10', border: 'border-green-500/30', text: 'text-green-400', fill: 'bg-green-500' };
-    if (score >= 60) return { bg: 'from-yellow-500/20 to-yellow-600/10', border: 'border-yellow-500/30', text: 'text-yellow-400', fill: 'bg-yellow-500' };
-    if (score >= 40) return { bg: 'from-orange-500/20 to-orange-600/10', border: 'border-orange-500/30', text: 'text-orange-400', fill: 'bg-orange-500' };
-    return { bg: 'from-red-500/20 to-red-600/10', border: 'border-red-500/30', text: 'text-red-400', fill: 'bg-red-500' };
-  };
-  
-  const colors = getHealthColor(score);
-  const circumference = 2 * Math.PI * 40;
-  const strokeDashoffset = circumference - (score / 100) * circumference;
-  
-  return (
-    <div className={`bg-gradient-to-br ${colors.bg} backdrop-blur-xl rounded-2xl p-6 border ${colors.border} hover:scale-[1.02] transition-all duration-300`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-white/60 text-sm mb-1">{label}</div>
-          <div className={`text-4xl font-bold ${colors.text}`}>
-            <AnimatedCounter value={score} suffix="%" />
-          </div>
-          <div className="text-white/40 text-xs mt-1">System Performance</div>
-        </div>
-        <div className="relative">
-          <svg className="w-20 h-20 -rotate-90">
-            <circle cx="40" cy="40" r="35" stroke="currentColor" strokeWidth="6" fill="none" className="text-white/10" />
-            <circle 
-              cx="40" cy="40" r="35" 
-              stroke="currentColor" 
-              strokeWidth="6" 
-              fill="none" 
-              className={colors.text}
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
-              style={{ transition: 'stroke-dashoffset 1s ease-out' }}
-            />
-          </svg>
-          <div className={`absolute inset-0 flex items-center justify-center ${colors.text} text-lg font-bold`}>
-            {score >= 80 ? '✓' : score >= 60 ? '!' : '⚠'}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const getPriorityColor = (priority) => {
-  switch (priority) {
-    case 'high': return 'bg-red-500/20 text-red-400 border-red-500/50';
-    case 'medium': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
-    case 'low': return 'bg-green-500/20 text-green-400 border-green-500/50';
-    default: return 'bg-gray-500/20 text-gray-400 border-gray-500/50';
-  }
-};
-
-const formatTime = (milliseconds) => {
-  if (!milliseconds || milliseconds === 0) return '0m';
-  
-  const totalMinutes = Math.floor(milliseconds / (1000 * 60));
-  const totalHours = Math.floor(totalMinutes / 60);
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-  const minutes = totalMinutes % 60;
-
-  if (days > 0) {
-    return `${days}d ${hours}h ${minutes}m`;
-  } else if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  } else {
-    return `${minutes}m`;
-  }
-};
-
-// ==============================================
-// MAIN COMPONENT
-// ==============================================
 
 const SuperAdminDashboard = () => {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [tokens, setTokens] = useState([]);
+  const [tickets, settickets] = useState([]);
   const [adminProfiles, setAdminProfiles] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [selectedCompany, setSelectedCompany] = useState(null);
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
 
-  // UI States
+  // Enhanced UI States
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedTimeRange, setSelectedTimeRange] = useState('7d');
   const [searchQuery, setSearchQuery] = useState('');
@@ -217,7 +36,7 @@ const SuperAdminDashboard = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState(null);
-  const [selectedToken, setSelectedToken] = useState(null);
+  const [selectedTicket, setselectedTicket] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [editingDept, setEditingDept] = useState(null);
   const [statusAction, setStatusAction] = useState({ status: '', reason: '' });
@@ -241,6 +60,7 @@ const SuperAdminDashboard = () => {
     category: '',
     subCategory: '',
     reason: '',
+    supportingDocuments: [],
     userDetails: {
       name: '',
       email: '',
@@ -248,6 +68,55 @@ const SuperAdminDashboard = () => {
       companyName: ''
     }
   });
+
+  const handleSuperAdminFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    const validFiles = files.filter(file => {
+      const isImage = file.type.startsWith('image/');
+      const isPDF = file.type === 'application/pdf';
+      const isValidSize = file.size <= 5 * 1024 * 1024;
+
+      if (!isValidSize) {
+        alert(`File ${file.name} exceeds 5MB limit`);
+        return false;
+      }
+
+      if (!isImage && !isPDF) {
+        alert(`File ${file.name} must be an image or PDF`);
+        return false;
+      }
+
+      return true;
+    });
+
+    const filePromises = validFiles.map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          resolve({
+            filename: file.name,
+            fileType: file.type.startsWith('image/') ? 'image' : 'pdf',
+            base64Data: e.target.result,
+            uploadedAt: new Date()
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    const uploadedFiles = await Promise.all(filePromises);
+    setNewToken(prev => ({
+      ...prev,
+      supportingDocuments: [...prev.supportingDocuments, ...uploadedFiles]
+    }));
+  };
+
+  const removeSuperAdminFile = (index) => {
+    setNewToken(prev => ({
+      ...prev,
+      supportingDocuments: prev.supportingDocuments.filter((_, i) => i !== index)
+    }));
+  };
 
   // Filters
   const [filters, setFilters] = useState({
@@ -261,8 +130,8 @@ const SuperAdminDashboard = () => {
   const [error, setError] = useState(null);
   const { API_URL, user } = useAuth();
 
-  const [editingAdmin, setEditingAdmin] = useState(null);
-  
+  const [editingAdmin, setEditingAdmin] = useState(false);
+
   // Solution Directory States
   const [solutionSortBy, setSolutionSortBy] = useState('date');
   const [solutionSortOrder, setSolutionSortOrder] = useState('desc');
@@ -271,39 +140,6 @@ const SuperAdminDashboard = () => {
   const [solutionViewMode, setSolutionViewMode] = useState('detailed');
   const [expandedSolutions, setExpandedSolutions] = useState({});
   const [copiedSolutionId, setCopiedSolutionId] = useState(null);
-
-  const COLORS = ['#ED1B2F', '#455185', '#00C49F', '#FFBB28', '#8884D8', '#FF8042'];
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { 'Authorization': `Bearer ${token}` } };
-
-      const [statsRes, usersRes, deptsRes, tokensRes, profilesRes] = await Promise.all([
-        axios.get(`${API_URL}/dashboard/stats`, config),
-        axios.get(`${API_URL}/users`, config),
-        axios.get(`${API_URL}/departments`, config),
-        axios.get(`${API_URL}/tokens`, config),
-        axios.get(`${API_URL}/admin-profiles`, config)
-      ]);
-
-      setStats(statsRes.data);
-      setUsers(usersRes.data);
-      setDepartments(deptsRes.data);
-      setTokens(tokensRes.data);
-      setAdminProfiles(profilesRes.data);
-    } catch (error) {
-      setError(`Failed to load dashboard data: ${error.response?.data?.message || error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const toggleSolutionExpand = (tokenId) => {
     setExpandedSolutions(prev => ({
@@ -323,8 +159,8 @@ const SuperAdminDashboard = () => {
   };
 
   const getFilteredAndSortedSolutions = () => {
-    let solutions = tokens.filter(t => t.status === 'resolved' && t.solution);
-    
+    let solutions = tickets.filter(t => t.status === 'resolved' && t.solution);
+
     if (searchQuery) {
       solutions = solutions.filter(t => 
         t.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -332,19 +168,19 @@ const SuperAdminDashboard = () => {
         t.solution?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
+
     if (filters.department !== 'all') {
       solutions = solutions.filter(t => t.department?._id === filters.department);
     }
-    
+
     if (solutionCategoryFilter !== 'all') {
       solutions = solutions.filter(t => t.category === solutionCategoryFilter);
     }
-    
+
     if (solutionPriorityFilter !== 'all') {
       solutions = solutions.filter(t => t.priority === solutionPriorityFilter);
     }
-    
+
     solutions.sort((a, b) => {
       let comparison = 0;
       switch (solutionSortBy) {
@@ -365,56 +201,8 @@ const SuperAdminDashboard = () => {
       }
       return solutionSortOrder === 'desc' ? comparison : -comparison;
     });
-    
-    return solutions;
-  };
 
-  const getSolutionStats = () => {
-    const solutions = tokens.filter(t => t.status === 'resolved' && t.solution);
-    
-    const solutionsWithRating = solutions.filter(t => t.feedback?.rating);
-    const reviewsCount = solutionsWithRating.length;
-    const avgRating = reviewsCount > 0 
-      ? solutionsWithRating.reduce((sum, t) => sum + t.feedback.rating, 0) / reviewsCount 
-      : 0;
-    
-    const solutionsWithTime = solutions.map(t => ({
-      ...t,
-      calculatedTime: getResolutionTime(t)
-    })).filter(t => t.calculatedTime !== null && t.calculatedTime > 0);
-    
-    const avgTime = solutionsWithTime.length > 0
-      ? solutionsWithTime.reduce((sum, t) => sum + t.calculatedTime, 0) / solutionsWithTime.length
-      : 0;
-    
-    const fastestTime = solutionsWithTime.length > 0
-      ? Math.min(...solutionsWithTime.map(t => t.calculatedTime))
-      : 0;
-    
-    const slowestTime = solutionsWithTime.length > 0
-      ? Math.max(...solutionsWithTime.map(t => t.calculatedTime))
-      : 0;
-    
-    const categories = [...new Set(solutions.map(t => t.category).filter(Boolean))];
-    
-    const topSolver = solutions.reduce((acc, t) => {
-      const solver = t.solvedBy?.name || 'Unknown';
-      acc[solver] = (acc[solver] || 0) + 1;
-      return acc;
-    }, {});
-    const topSolverName = Object.entries(topSolver).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
-    
-    return { 
-      total: solutions.length, 
-      avgRating, 
-      avgTime, 
-      categories, 
-      topSolverName,
-      reviewsCount,
-      fastestTime,
-      slowestTime,
-      solutionsWithTimeCount: solutionsWithTime.length
-    };
+    return solutions;
   };
 
   const getResolutionTime = (token) => {
@@ -425,17 +213,144 @@ const SuperAdminDashboard = () => {
     return null;
   };
 
+  const solutionStats = useMemo(() => {
+    const solutions = tickets.filter(t => t.status === 'resolved' && t.solution);
+
+    const solutionsWithRating = solutions.filter(t => t.feedback?.rating);
+    const reviewsCount = solutionsWithRating.length;
+    const avgRating = reviewsCount > 0 
+      ? solutionsWithRating.reduce((sum, t) => sum + t.feedback.rating, 0) / reviewsCount 
+      : 0;
+
+    const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    solutionsWithRating.forEach(t => {
+      const rating = Math.round(t.feedback.rating);
+      if (rating >= 1 && rating <= 5) {
+        ratingDistribution[rating]++;
+      }
+    });
+
+    const pendingReviews = solutions.filter(t => !t.feedback?.rating).length;
+
+    const recentReviews = solutionsWithRating
+      .filter(t => t.feedback?.submittedAt)
+      .sort((a, b) => new Date(b.feedback.submittedAt) - new Date(a.feedback.submittedAt))
+      .slice(0, 5)
+      .map(t => ({
+        ticketNumber: t.ticketNumber,
+        title: t.title,
+        rating: t.feedback.rating,
+        comment: t.feedback.comment,
+        submittedAt: t.feedback.submittedAt,
+        solvedBy: t.solvedBy?.name || 'Unknown'
+      }));
+
+    const solutionsWithTime = solutions.map(t => ({
+      ...t,
+      calculatedTime: getResolutionTime(t)
+    })).filter(t => t.calculatedTime !== null && t.calculatedTime > 0);
+
+    const avgTime = solutionsWithTime.length > 0
+      ? solutionsWithTime.reduce((sum, t) => sum + t.calculatedTime, 0) / solutionsWithTime.length
+      : 0;
+
+    const fastestTime = solutionsWithTime.length > 0
+      ? Math.min(...solutionsWithTime.map(t => t.calculatedTime))
+      : 0;
+
+    const slowestTime = solutionsWithTime.length > 0
+      ? Math.max(...solutionsWithTime.map(t => t.calculatedTime))
+      : 0;
+
+    const categories = [...new Set(solutions.map(t => t.category).filter(Boolean))];
+
+    const topSolver = solutions.reduce((acc, t) => {
+      const solver = t.solvedBy?.name || 'Unknown';
+      acc[solver] = (acc[solver] || 0) + 1;
+      return acc;
+    }, {});
+    const topSolverName = Object.entries(topSolver).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+    return { 
+      total: solutions.length, 
+      avgRating, 
+      avgTime, 
+      categories, 
+      topSolverName,
+      reviewsCount,
+      pendingReviews,
+      ratingDistribution,
+      recentReviews,
+      fastestTime,
+      slowestTime,
+      solutionsWithTimeCount: solutionsWithTime.length
+    };
+  }, [tickets]);
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case 'high': return 'bg-red-500/20 text-red-400 border-red-500/50';
+      case 'medium': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
+      case 'low': return 'bg-green-500/20 text-green-400 border-green-500/50';
+      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/50';
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'resolved': return 'bg-green-500/20 text-green-400 border-green-500/50';
+      case 'pending': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
+      case 'assigned': return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
+      case 'in-progress': return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
+      case 'solved': return 'bg-green-500/20 text-green-400 border-green-500/50';
+      case 'active': return 'bg-green-500/20 text-green-400 border-green-500/50';
+      case 'suspended': return 'bg-red-500/20 text-red-400 border-red-500/50';
+      case 'frozen': return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
+      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/50';
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { 'Authorization': `Bearer ${token}` } };
+
+      const [statsRes, usersRes, deptsRes, ticketsRes, profilesRes, companiesRes] = await Promise.all([
+        axios.get(`${API_URL}/dashboard/stats`, config),
+        axios.get(`${API_URL}/users`, config),
+        axios.get(`${API_URL}/departments`, config),
+        axios.get(`${API_URL}/tickets`, config),
+        axios.get(`${API_URL}/admin-profiles`, config),
+        axios.get(`${API_URL}/companies`, config)
+      ]);
+
+      setStats(statsRes.data);
+      setUsers(usersRes.data);
+      setDepartments(deptsRes.data);
+      settickets(ticketsRes.data);
+      setAdminProfiles(profilesRes.data);
+      setCompanies(companiesRes.data);
+    } catch (error) {
+      setError(`Failed to load dashboard data: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Department CRUD
   const saveDepartment = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { 'Authorization': `Bearer ${token}` } };
-      
       if (editingDept) {
-        await axios.patch(`${API_URL}/departments/${editingDept._id}`, newDept, config);
+        await axios.patch(`${API_URL}/departments/${editingDept._id}`, newDept);
       } else {
-        await axios.post(`${API_URL}/departments`, newDept, config);
+        await axios.post(`${API_URL}/departments`, newDept);
       }
       setNewDept({ name: '', description: '', categories: [] });
       setShowDeptModal(false);
@@ -449,13 +364,35 @@ const SuperAdminDashboard = () => {
   const deleteDepartment = async (deptId) => {
     if (window.confirm('Are you sure you want to delete this department?')) {
       try {
-        const token = localStorage.getItem('token');
-        const config = { headers: { 'Authorization': `Bearer ${token}` } };
-        await axios.delete(`${API_URL}/departments/${deptId}`, config);
+        await axios.delete(`${API_URL}/departments/${deptId}`);
         fetchData();
       } catch (error) {
         alert('Failed to delete department');
       }
+    }
+  };
+
+  const refreshCompanies = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { 'Authorization': `Bearer ${token}` } };
+      await axios.post(`${API_URL}/companies/refresh`, {}, config);
+      fetchData();
+      alert('Companies refreshed successfully');
+    } catch (error) {
+      alert('Failed to refresh companies');
+    }
+  };
+
+  const viewCompanyDetails = async (companyId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { 'Authorization': `Bearer ${token}` } };
+      const response = await axios.get(`${API_URL}/companies/${companyId}`, config);
+      setSelectedCompany(response.data);
+      setShowCompanyModal(true);
+    } catch (error) {
+      alert('Failed to load company details');
     }
   };
 
@@ -486,10 +423,7 @@ const SuperAdminDashboard = () => {
 
       setShowAdminProfileForm(false);
       setEditingAdmin(null);
-      setNewAdminProfile({ 
-        name: '', email: '', password: '', expertise: [], 
-        department: '', categories: [], phone: '', employeeId: '' 
-      });
+      setNewAdminProfile({ name: '', email: '', password: '', expertise: [], department: '', categories: [], phone: '', employeeId: '' });
       fetchData();
     } catch (error) {
       console.error('Error saving admin profile:', error);
@@ -500,9 +434,7 @@ const SuperAdminDashboard = () => {
   const deleteAdminProfile = async (profileId) => {
     if (window.confirm('Are you sure you want to delete this admin profile?')) {
       try {
-        const token = localStorage.getItem('token');
-        const config = { headers: { 'Authorization': `Bearer ${token}` } };
-        await axios.delete(`${API_URL}/admin-profiles/${profileId}`, config);
+        await axios.delete(`${API_URL}/admin-profiles/${profileId}`);
         fetchData();
       } catch (error) {
         alert('Failed to delete admin profile');
@@ -565,7 +497,7 @@ const SuperAdminDashboard = () => {
         }
       };
 
-      await axios.post(`${API_URL}/tokens/on-behalf`, newToken, config);
+      await axios.post(`${API_URL}/tickets/on-behalf`, newToken, config);
 
       setShowCreateTokenModal(false);
       setNewToken({
@@ -576,6 +508,7 @@ const SuperAdminDashboard = () => {
         category: '',
         subCategory: '',
         reason: '',
+        supportingDocuments: [],
         userDetails: {
           name: '',
           email: '',
@@ -594,7 +527,7 @@ const SuperAdminDashboard = () => {
 
   // Analytics calculations
   const analytics = useMemo(() => {
-    if (!tokens.length || !departments.length) return null;
+    if (!tickets.length) return null;
 
     const now = new Date();
     const timeRanges = {
@@ -604,53 +537,42 @@ const SuperAdminDashboard = () => {
       'all': Infinity
     };
 
-    const currentPeriod = timeRanges[selectedTimeRange];
-    const cutoff = now - currentPeriod;
-    const previousCutoff = now - (currentPeriod * 2);
-    
-    const filteredTokens = tokens.filter(t => new Date(t.createdAt) >= cutoff);
-    const previousPeriodTokens = tokens.filter(t => {
-      const created = new Date(t.createdAt);
-      return created >= previousCutoff && created < cutoff;
-    });
+    const cutoff = now - timeRanges[selectedTimeRange];
+    const filteredtickets = tickets.filter(t => new Date(t.createdAt) >= cutoff);
 
     // Time-based statistics
-    const tokensByDay = {};
-    filteredTokens.forEach(token => {
+    const ticketsByDay = {};
+    filteredtickets.forEach(token => {
       const day = new Date(token.createdAt).toLocaleDateString();
-      if (!tokensByDay[day]) {
-        tokensByDay[day] = { created: 0, solved: 0, pending: 0 };
+      if (!ticketsByDay[day]) {
+        ticketsByDay[day] = { created: 0, solved: 0, pending: 0 };
       }
-      tokensByDay[day].created++;
-      if (token.status === 'resolved' || token.status === 'solved') tokensByDay[day].solved++;
-      if (token.status === 'pending') tokensByDay[day].pending++;
+      ticketsByDay[day].created++;
+      if (token.status === 'solved') ticketsByDay[day].solved++;
+      if (token.status === 'pending') ticketsByDay[day].pending++;
     });
 
-    const timeSeriesData = Object.entries(tokensByDay)
+    const timeSeriesData = Object.entries(ticketsByDay)
       .map(([date, data]) => ({ date, ...data }))
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    // Sparkline data for quick visualization
-    const ticketSparkline = timeSeriesData.slice(-7).map(d => d.created);
-    const resolvedSparkline = timeSeriesData.slice(-7).map(d => d.solved);
-
     // Department performance
     const deptPerformance = departments.map(dept => {
-      const deptTokens = filteredTokens.filter(t => t.department?._id === dept._id);
-      const resolved = deptTokens.filter(t => t.status === 'resolved' || t.status === 'solved').length;
-      const resolvedWithTime = deptTokens.filter(t => t.timeToSolve);
+      const depttickets = filteredtickets.filter(t => t.department?._id === dept._id);
+      const resolved = depttickets.filter(t => t.status === 'resolved').length;
+      // Only include resolved tickets with valid timeToSolve data
+      const resolvedWithTime = depttickets.filter(t => t.status === 'resolved' && t.timeToSolve && t.timeToSolve > 0);
       const avgTime = resolvedWithTime.length > 0 
         ? resolvedWithTime.reduce((sum, t) => sum + t.timeToSolve, 0) / resolvedWithTime.length 
         : 0;
 
       return {
         name: dept.name,
-        total: deptTokens.length,
+        total: depttickets.length,
         solved: resolved,
-        pending: deptTokens.filter(t => t.status === 'pending').length,
-        inProgress: deptTokens.filter(t => t.status === 'in-progress').length,
+        pending: depttickets.filter(t => t.status === 'pending').length,
         avgTime: avgTime,
-        efficiency: deptTokens.length ? (resolved / deptTokens.length * 100).toFixed(1) : 0
+        efficiency: depttickets.length ? (resolved / depttickets.length * 100).toFixed(1) : 0
       };
     });
 
@@ -658,57 +580,47 @@ const SuperAdminDashboard = () => {
     const adminStats = users
       .filter(u => u.role === 'admin')
       .map(admin => {
-        const adminTokens = filteredTokens.filter(t => t.assignedTo?._id === admin._id);
-        const resolved = adminTokens.filter(t => t.status === 'resolved' || t.status === 'solved');
-        const totalTime = resolved.reduce((sum, t) => sum + (t.timeToSolve || 0), 0);
-        const avgTime = resolved.length ? totalTime / resolved.length : 0;
-        const feedbackTokens = resolved.filter(t => t.feedback?.rating);
-        const avgRating = feedbackTokens.length 
-          ? feedbackTokens.reduce((sum, t) => sum + t.feedback.rating, 0) / feedbackTokens.length 
+        const admintickets = filteredtickets.filter(t => t.assignedTo?._id === admin._id);
+        const resolved = admintickets.filter(t => t.status === 'resolved');
+        // Only include resolved tickets with valid timeToSolve data
+        const resolvedWithTime = resolved.filter(t => t.timeToSolve && t.timeToSolve > 0);
+        const totalTime = resolvedWithTime.reduce((sum, t) => sum + t.timeToSolve, 0);
+        const avgTime = resolvedWithTime.length > 0 ? totalTime / resolvedWithTime.length : 0;
+        const feedbacktickets = resolved.filter(t => t.feedback?.rating);
+        const avgRating = feedbacktickets.length 
+          ? feedbacktickets.reduce((sum, t) => sum + t.feedback.rating, 0) / feedbacktickets.length 
           : 0;
 
         return {
           admin,
-          total: adminTokens.length,
+          total: admintickets.length,
           solved: resolved.length,
-          working: adminTokens.filter(t => ['assigned', 'in-progress'].includes(t.status)).length,
+          working: admintickets.filter(t => ['assigned', 'in-progress'].includes(t.status)).length,
           totalTime,
           avgTime: avgTime,
           avgRating,
-          feedbackCount: feedbackTokens.length,
-          efficiency: adminTokens.length ? (resolved.length / adminTokens.length * 100) : 0
+          feedbackCount: feedbacktickets.length,
+          efficiency: admintickets.length ? (resolved.length / admintickets.length * 100) : 0
         };
       })
       .sort((a, b) => b.solved - a.solved);
 
     // Priority distribution
     const priorityDist = {
-      high: filteredTokens.filter(t => t.priority === 'high').length,
-      medium: filteredTokens.filter(t => t.priority === 'medium').length,
-      low: filteredTokens.filter(t => t.priority === 'low').length
+      high: filteredtickets.filter(t => t.priority === 'high').length,
+      medium: filteredtickets.filter(t => t.priority === 'medium').length,
+      low: filteredtickets.filter(t => t.priority === 'low').length
     };
 
     // Status distribution
     const statusDist = {
-      resolved: filteredTokens.filter(t => t.status === 'resolved' || t.status === 'solved').length,
-      pending: filteredTokens.filter(t => t.status === 'pending').length,
-      assigned: filteredTokens.filter(t => ['assigned', 'in-progress'].includes(t.status)).length
-    };
-
-    // Previous period stats for trend comparisons
-    const previousStats = {
-      total: previousPeriodTokens.length,
-      resolved: previousPeriodTokens.filter(t => t.status === 'resolved' || t.status === 'solved').length,
-      avgSolveTime: previousPeriodTokens.filter(t => t.timeToSolve).length > 0
-        ? previousPeriodTokens.filter(t => t.timeToSolve).reduce((sum, t) => sum + t.timeToSolve, 0) / previousPeriodTokens.filter(t => t.timeToSolve).length
-        : 0,
-      avgRating: previousPeriodTokens.filter(t => t.feedback?.rating).length > 0
-        ? previousPeriodTokens.filter(t => t.feedback?.rating).reduce((sum, t) => sum + t.feedback.rating, 0) / previousPeriodTokens.filter(t => t.feedback?.rating).length
-        : 0
+      resolved: filteredtickets.filter(t => t.status === 'resolved').length,
+      pending: filteredtickets.filter(t => t.status === 'pending').length,
+      assigned: filteredtickets.filter(t => ['assigned', 'in-progress'].includes(t.status)).length
     };
 
     // Feedback analysis
-    const feedbackAnalysis = filteredTokens
+    const feedbackAnalysis = filteredtickets
       .filter(t => t.feedback?.rating)
       .reduce((acc, token) => {
         const rating = token.feedback.rating;
@@ -718,54 +630,23 @@ const SuperAdminDashboard = () => {
         return acc;
       }, { total: 0, sum: 0, ratings: {} });
 
-    // Calculate system health score
-    const resolutionRate = filteredTokens.length > 0 ? (statusDist.resolved / filteredTokens.length) * 100 : 0;
-    const lowPendingScore = filteredTokens.length > 0 ? Math.max(0, 100 - (statusDist.pending / filteredTokens.length) * 200) : 100;
-    const ratingScore = feedbackAnalysis.total > 0 ? (feedbackAnalysis.sum / feedbackAnalysis.total) * 20 : 50;
-    const healthScore = Math.round((resolutionRate * 0.4 + lowPendingScore * 0.3 + ratingScore * 0.3));
-
-    // Urgent items (high priority pending)
-    const urgentItems = filteredTokens.filter(t => t.priority === 'high' && t.status === 'pending');
-    
-    // Recent activity (last 24h)
-    const last24h = now - (24 * 60 * 60 * 1000);
-    const recentActivity = tokens
-      .filter(t => new Date(t.updatedAt) >= last24h)
-      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-      .slice(0, 10);
-
-    // Top performers
-    const topPerformers = adminStats.filter(a => a.solved > 0).slice(0, 3);
-
-    // Today's stats
-    const today = new Date().toLocaleDateString();
-    const todayTokens = tokens.filter(t => new Date(t.createdAt).toLocaleDateString() === today);
-    const todayResolved = tokens.filter(t => t.solvedAt && new Date(t.solvedAt).toLocaleDateString() === today);
-
     return {
       timeSeriesData,
-      ticketSparkline,
-      resolvedSparkline,
       deptPerformance,
       adminStats,
       priorityDist,
       statusDist,
-      previousStats,
       feedbackAnalysis,
-      healthScore,
-      urgentItems,
-      recentActivity,
-      topPerformers,
-      todayStats: {
-        created: todayTokens.length,
-        resolved: todayResolved.length
-      },
       avgRating: feedbackAnalysis.total ? (feedbackAnalysis.sum / feedbackAnalysis.total).toFixed(2) : 0,
-      avgSolveTime: filteredTokens.filter(t => t.timeToSolve).length > 0 
-        ? filteredTokens.filter(t => t.timeToSolve).reduce((sum, t) => sum + t.timeToSolve, 0) / filteredTokens.filter(t => t.timeToSolve).length
-        : 0
+      avgSolveTime: (() => {
+        // Only include resolved tickets with valid timeToSolve data
+        const ticketsWithValidTime = filteredtickets.filter(t => t.status === 'resolved' && t.timeToSolve && t.timeToSolve > 0);
+        return ticketsWithValidTime.length > 0 
+          ? ticketsWithValidTime.reduce((sum, t) => sum + t.timeToSolve, 0) / ticketsWithValidTime.length
+          : 0;
+      })()
     };
-  }, [tokens, departments, users, selectedTimeRange]);
+  }, [tickets, departments, users, selectedTimeRange]);
 
   // Sorting function
   const sortedData = (data, key) => {
@@ -806,8 +687,8 @@ const SuperAdminDashboard = () => {
     return filtered;
   }, [adminProfiles, searchQuery, filters.department]);
 
-  const filteredTokensList = useMemo(() => {
-    let filtered = tokens;
+  const filteredticketsList = useMemo(() => {
+    let filtered = tickets;
 
     if (filters.status !== 'all') {
       filtered = filtered.filter(t => t.status === filters.status);
@@ -822,14 +703,41 @@ const SuperAdminDashboard = () => {
     }
 
     return filtered;
-  }, [tokens, filters]);
+  }, [tickets, filters]);
+
+  // Helper to format time in days, hours, minutes from milliseconds
+  const formatTime = (milliseconds) => {
+    if (!milliseconds || milliseconds === 0) return '0m';
+
+    const totalMinutes = Math.floor(milliseconds / (1000 * 60));
+    const totalHours = Math.floor(totalMinutes / 60);
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    const minutes = totalMinutes % 60;
+
+    if (days > 0) {
+      return `${days}d ${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  };
+
+  const COLORS = ['#ED1B2F', '#455185', '#00C49F', '#FFBB28', '#8884D8', '#FF8042'];
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-[#ED1B2F] mx-auto mb-4"></div>
-          <div className="text-white text-xl">Loading Analytics...</div>
+          <div className="relative">
+            <div className="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-[#ED1B2F] mx-auto mb-4"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-4xl">🚀</div>
+            </div>
+          </div>
+          <div className="text-white text-2xl font-bold mt-4 animate-pulse">Loading Command Center...</div>
+          <div className="text-white/60 text-sm mt-2">Gathering analytics data</div>
         </div>
       </div>
     );
@@ -838,186 +746,247 @@ const SuperAdminDashboard = () => {
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900">
-        <div className="bg-red-500/20 border border-red-500 rounded-2xl p-8 max-w-md">
-          <div className="text-red-400 text-xl mb-4">⚠️ Error</div>
-          <div className="text-white">{error}</div>
-          <button onClick={fetchData} className="mt-4 px-6 py-2 bg-[#ED1B2F] hover:bg-[#d41829] text-white rounded-lg transition-colors">
-            Retry
+        <div className="bg-red-500/10 border-2 border-red-500/50 rounded-3xl p-10 max-w-md backdrop-blur-xl">
+          <div className="text-6xl mb-4 text-center">⚠️</div>
+          <div className="text-red-400 text-2xl mb-4 font-bold text-center">Error Loading Dashboard</div>
+          <div className="text-white/80 mb-6 text-center">{error}</div>
+          <button onClick={fetchData} className="w-full px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-all shadow-lg hover:shadow-2xl transform hover:scale-105 font-semibold">
+            🔄 Retry Loading
           </button>
         </div>
       </div>
     );
   }
 
-  const solutionStats = getSolutionStats();
-  const filteredSolutions = getFilteredAndSortedSolutions();
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900">
       <div className="container mx-auto px-4 py-8">
-        {/* 3D Header */}
-        <div className="mb-8 h-64 rounded-3xl overflow-hidden shadow-2xl border border-white/10">
+        {/* Enhanced 3D Header with Gradient Overlay */}
+        <div className="mb-8 h-80 rounded-3xl overflow-hidden shadow-2xl border border-white/10 relative group">
           <Canvas camera={{ position: [0, 0, 5] }}>
             <ambientLight intensity={0.5} />
             <pointLight position={[10, 10, 10]} intensity={1.5} />
             <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ED1B2F" />
-            <AnimatedSphere color="#ED1B2F" position={[-1.5, 0, 0]} />
-            <AnimatedSphere color="#455185" position={[1.5, 0, 0]} />
-            <AnimatedSphere color="#00C49F" position={[0, 1.5, 0]} />
-            <OrbitControls enableZoom={false} autoRotate autoRotateSpeed={0.5} />
+            <AnimatedSphere color="#ED1B2F" position={[-2, 0, 0]} />
+            <AnimatedSphere color="#455185" position={[2, 0, 0]} />
+            <AnimatedSphere color="#00C49F" position={[0, 2, 0]} />
+            <AnimatedSphere color="#FFBB28" position={[0, -2, 0]} />
+            <OrbitControls enableZoom={false} autoRotate autoRotateSpeed={0.8} />
           </Canvas>
-        </div>
-
-        {/* Modern Header */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-[#ED1B2F] via-purple-500 to-[#455185] bg-clip-text text-transparent mb-2">
-              Command Center
-            </h1>
-            <p className="text-white/60 text-lg">Real-time Analytics & Performance Monitoring</p>
-            <p className="text-white/40 text-sm mt-1">Welcome back, {user?.name}</p>
-          </div>
-
-          <button
-            onClick={() => setShowCreateTokenModal(true)}
-            className="px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2 whitespace-nowrap"
-          >
-            <span>➕</span>
-            Create Token for User
-          </button>
-
-          {/* Time Range Selector */}
-          <div className="flex gap-2">
-            {['24h', '7d', '30d', 'all'].map(range => (
-              <button
-                key={range}
-                onClick={() => setSelectedTimeRange(range)}
-                className={`px-4 py-2 rounded-lg transition-all ${
-                  selectedTimeRange === range
-                    ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white shadow-lg'
-                    : 'bg-white/10 text-white/60 hover:bg-white/20'
-                }`}
-              >
-                {range === 'all' ? 'All Time' : range.toUpperCase()}
-              </button>
-            ))}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#1a1f3a] via-transparent to-transparent flex items-end">
+            <div className="p-8 w-full">
+              <h1 className="text-6xl font-black bg-gradient-to-r from-[#ED1B2F] via-purple-500 to-[#455185] bg-clip-text text-transparent mb-3 drop-shadow-2xl">
+                Supreme Command Center
+              </h1>
+              <p className="text-white/80 text-xl font-medium">Real-time Analytics & Strategic Control</p>
+            </div>
           </div>
         </div>
 
-        {/* Key Metrics Cards */}
+        {/* Modern Header with Quick Actions */}
+        <div className="mb-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#ED1B2F] to-[#455185] flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                {user?.name?.charAt(0)}
+              </div>
+              <div>
+                <p className="text-white/60 text-sm">Welcome back,</p>
+                <h2 className="text-2xl font-bold text-white">{user?.name}</h2>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => setShowCreateTokenModal(true)}
+              className="px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-all shadow-lg hover:shadow-2xl transform hover:scale-105 flex items-center gap-2 font-semibold group"
+            >
+              <span className="text-xl group-hover:rotate-90 transition-transform">➕</span>
+              Create Token for User
+            </button>
+
+            {/* Time Range Selector with Icons */}
+            <div className="flex gap-2 bg-white/5 backdrop-blur-xl rounded-xl p-1 border border-white/10">
+              {[
+                { value: '24h', label: '24h', icon: '⏰' },
+                { value: '7d', label: '7d', icon: '📅' },
+                { value: '30d', label: '30d', icon: '📊' },
+                { value: 'all', label: 'All', icon: '🌐' }
+              ].map(range => (
+                <button
+                  key={range.value}
+                  onClick={() => setSelectedTimeRange(range.value)}
+                  className={`px-4 py-2 rounded-lg transition-all font-semibold flex items-center gap-2 ${
+                    selectedTimeRange === range.value
+                      ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white shadow-lg transform scale-105'
+                      : 'bg-transparent text-white/60 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <span>{range.icon}</span>
+                  {range.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Key Metrics Cards with Animations */}
         {stats && analytics && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 backdrop-blur-xl rounded-2xl p-6 border border-blue-500/30 hover:border-blue-500/50 transition-all duration-300 group hover:scale-[1.02] hover:shadow-xl hover:shadow-blue-500/10">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-blue-400 text-3xl group-hover:scale-110 transition-transform">🎫</div>
-                <MiniSparkline data={analytics.ticketSparkline} color="#60a5fa" height={24} />
-              </div>
-              <div className="text-4xl font-bold text-white mb-1">
-                <AnimatedCounter value={stats.overview?.totalTokens || 0} />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-blue-300/70 text-sm">Support Tickets</span>
-                <TrendIndicator current={stats.overview?.totalTokens || 0} previous={analytics.previousStats.total} suffix="%" />
-              </div>
-              <div className="mt-2 text-xs text-blue-400/50">
-                Today: +{analytics.todayStats.created}
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 backdrop-blur-xl rounded-2xl p-6 border border-green-500/30 hover:border-green-500/50 transition-all duration-300 group hover:scale-[1.02] hover:shadow-xl hover:shadow-green-500/10">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-green-400 text-3xl group-hover:scale-110 transition-transform">✅</div>
-                <MiniSparkline data={analytics.resolvedSparkline} color="#4ade80" height={24} />
-              </div>
-              <div className="text-4xl font-bold text-white mb-1">
-                <AnimatedCounter value={stats.overview?.resolvedTokens || 0} />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-green-300/70 text-sm">
-                  <AnimatedCounter value={(stats.overview?.resolvedTokens / (stats.overview?.totalTokens || 1)) * 100 || 0} decimals={1} suffix="%" /> Success
-                </span>
-                <TrendIndicator current={stats.overview?.resolvedTokens || 0} previous={analytics.previousStats.resolved} suffix="%" />
-              </div>
-              <div className="mt-2 text-xs text-green-400/50">
-                Today: +{analytics.todayStats.resolved} resolved
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30 hover:border-purple-500/50 transition-all duration-300 group hover:scale-[1.02] hover:shadow-xl hover:shadow-purple-500/10">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-purple-400 text-3xl group-hover:scale-110 transition-transform">⚡</div>
-                <div className="flex items-center gap-1">
-                  <PulsingDot color="purple" />
-                  <span className="text-purple-400/50 text-xs">Live</span>
+            <div className="relative overflow-hidden bg-gradient-to-br from-blue-600/30 to-blue-800/20 backdrop-blur-xl rounded-2xl p-6 border border-blue-500/40 hover:border-blue-400/60 transition-all group hover:scale-105 transform shadow-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-5xl">🎫</div>
+                  <div className="text-blue-300/50 text-sm font-semibold uppercase tracking-wider">Total</div>
+                </div>
+                <div className="text-5xl font-black text-white mb-2">{stats.overview.totaltickets}</div>
+                <div className="text-blue-200/80 text-sm font-medium">Support Tickets</div>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="h-1 flex-1 bg-blue-900/30 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 w-full"></div>
+                  </div>
                 </div>
               </div>
-              <div className="text-4xl font-bold text-white mb-1">{formatTime(analytics.avgSolveTime)}</div>
-              <div className="flex items-center justify-between">
-                <span className="text-purple-300/70 text-sm">Resolution Time</span>
-                <TrendIndicator current={analytics.avgSolveTime} previous={analytics.previousStats.avgSolveTime} suffix="%" invertColors={true} />
-              </div>
-              <div className="mt-2 text-xs text-purple-400/50">
-                Faster is better
+            </div>
+
+            <div className="relative overflow-hidden bg-gradient-to-br from-green-600/30 to-green-800/20 backdrop-blur-xl rounded-2xl p-6 border border-green-500/40 hover:border-green-400/60 transition-all group hover:scale-105 transform shadow-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/20 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-5xl">✅</div>
+                  <div className="text-green-300/50 text-sm font-semibold uppercase tracking-wider">Resolved</div>
+                </div>
+                <div className="text-5xl font-black text-white mb-2">{stats.overview.resolvedtickets}</div>
+                <div className="text-green-200/80 text-sm font-medium">
+                  {((stats.overview.resolvedtickets / stats.overview.totaltickets) * 100 || 0).toFixed(1)}% Success Rate
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="h-1 flex-1 bg-green-900/30 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
+                      style={{ width: `${((stats.overview.resolvedtickets / stats.overview.totaltickets) * 100 || 0)}%` }}
+                    ></div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 backdrop-blur-xl rounded-2xl p-6 border border-yellow-500/30 hover:border-yellow-500/50 transition-all duration-300 group hover:scale-[1.02] hover:shadow-xl hover:shadow-yellow-500/10">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-yellow-400 text-3xl group-hover:scale-110 transition-transform">⭐</div>
-                <div className="flex gap-0.5">
-                  {[1,2,3,4,5].map(star => (
-                    <span key={star} className={`text-sm ${star <= Math.round(parseFloat(analytics.avgRating)) ? 'text-yellow-400' : 'text-yellow-400/20'}`}>★</span>
+            <div className="relative overflow-hidden bg-gradient-to-br from-purple-600/30 to-purple-800/20 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/40 hover:border-purple-400/60 transition-all group hover:scale-105 transform shadow-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-5xl">⚡</div>
+                  <div className="text-purple-300/50 text-sm font-semibold uppercase tracking-wider">Avg Time</div>
+                </div>
+                <div className="text-5xl font-black text-white mb-2">{formatTime(analytics.avgSolveTime)}</div>
+                <div className="text-purple-200/80 text-sm font-medium">Resolution Time</div>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="h-1 flex-1 bg-purple-900/30 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-purple-500 to-purple-400 w-full animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden bg-gradient-to-br from-yellow-600/30 to-yellow-800/20 backdrop-blur-xl rounded-2xl p-6 border border-yellow-500/40 hover:border-yellow-400/60 transition-all group hover:scale-105 transform shadow-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/20 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-5xl">⭐</div>
+                  <div className="text-yellow-300/50 text-sm font-semibold uppercase tracking-wider">Rating</div>
+                </div>
+                <div className="text-5xl font-black text-white mb-2">{analytics.avgRating}</div>
+                <div className="text-yellow-200/80 text-sm font-medium">{analytics.feedbackAnalysis.total} Reviews</div>
+                <div className="mt-3 flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <div 
+                      key={star} 
+                      className={`text-2xl ${star <= Math.round(analytics.avgRating) ? 'text-yellow-400' : 'text-yellow-900/30'}`}
+                    >
+                      ⭐
+                    </div>
                   ))}
                 </div>
-              </div>
-              <div className="text-4xl font-bold text-white mb-1">
-                <AnimatedCounter value={parseFloat(analytics.avgRating) || 0} decimals={2} />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-yellow-300/70 text-sm">{analytics.feedbackAnalysis.total} Reviews</span>
-                <TrendIndicator current={parseFloat(analytics.avgRating) || 0} previous={analytics.previousStats.avgRating} suffix="%" />
-              </div>
-              <div className="mt-2 text-xs text-yellow-400/50">
-                Customer satisfaction
               </div>
             </div>
           </div>
         )}
 
-        {/* Navigation Tabs */}
-        <div className="mb-8 flex gap-2 overflow-x-auto pb-2">
-          {[
-            { id: 'overview', icon: '📊', label: 'Overview' },
-            { id: 'analytics', icon: '📈', label: 'Analytics' },
-            { id: 'solutions', icon: '💡', label: 'Solution Directory' },
-            { id: 'departments', icon: '🏢', label: 'Departments' },
-            { id: 'admins', icon: '👥', label: 'Admin Team' },
-            { id: 'users', icon: '👤', label: 'User Management' },
-            { id: 'tokens', icon: '🎫', label: 'All Tickets' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-3 rounded-xl transition-all whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white shadow-lg transform scale-105'
-                  : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
-              }`}
-            >
-              <span className="mr-2">{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
+        {/* Enhanced Navigation Tabs */}
+        <div className="mb-8 bg-white/5 backdrop-blur-xl rounded-2xl p-2 border border-white/10 shadow-xl">
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {[
+              { id: 'overview', icon: '📊', label: 'Overview', gradient: 'from-blue-500 to-cyan-500' },
+              { id: 'analytics', icon: '📈', label: 'Analytics', gradient: 'from-purple-500 to-pink-500' },
+              { id: 'companies', icon: '🏪', label: 'Companies', gradient: 'from-amber-500 to-orange-500' },
+              { id: 'solutions', icon: '💡', label: 'Solutions', gradient: 'from-green-500 to-emerald-500' },
+              { id: 'departments', icon: '🏢', label: 'Departments', gradient: 'from-orange-500 to-red-500' },
+              { id: 'admins', icon: '👥', label: 'Admins', gradient: 'from-indigo-500 to-purple-500' },
+              { id: 'users', icon: '👤', label: 'Users', gradient: 'from-pink-500 to-rose-500' },
+              { id: 'tickets', icon: '🎫', label: 'Tickets', gradient: 'from-teal-500 to-cyan-500' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-6 py-3 rounded-xl transition-all whitespace-nowrap font-semibold ${
+                  activeTab === tab.id
+                    ? `bg-gradient-to-r ${tab.gradient} text-white shadow-2xl transform scale-105`
+                    : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <span className="mr-2 text-xl">{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Overview Tab */}
         {activeTab === 'overview' && analytics && (
           <div className="space-y-6">
+            {/* Real-time Activity Pulse */}
+            <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/20 shadow-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                  <h3 className="text-2xl font-bold text-white">Live System Pulse</h3>
+                </div>
+                <div className="text-white/60 text-sm">Updated in real-time</div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-xl p-4 border border-blue-500/30">
+                  <div className="text-blue-400 text-3xl mb-2">👥</div>
+                  <div className="text-2xl font-bold text-white">{users.length}</div>
+                  <div className="text-blue-300/70 text-sm">Total Users</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 rounded-xl p-4 border border-green-500/30">
+                  <div className="text-green-400 text-3xl mb-2">👨‍💼</div>
+                  <div className="text-2xl font-bold text-white">{users.filter(u => u.role === 'admin').length}</div>
+                  <div className="text-green-300/70 text-sm">Active Admins</div>
+                </div>
+                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-xl p-4 border border-purple-500/30">
+                  <div className="text-purple-400 text-3xl mb-2">🏢</div>
+                  <div className="text-2xl font-bold text-white">{departments.length}</div>
+                  <div className="text-purple-300/70 text-sm">Departments</div>
+                </div>
+                <div className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 rounded-xl p-4 border border-orange-500/30">
+                  <div className="text-orange-400 text-3xl mb-2">⏳</div>
+                  <div className="text-2xl font-bold text-white">{tickets.filter(t => t.status === 'pending').length}</div>
+                  <div className="text-orange-300/70 text-sm">Pending Tickets</div>
+                </div>
+              </div>
+            </div>
+
             {/* Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Time Series Chart */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-                <h3 className="text-xl font-bold text-white mb-4">📅 Ticket Trends</h3>
+              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">📅</span>
+                  Ticket Trends Over Time
+                </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={analytics.timeSeriesData}>
                     <defs>
@@ -1035,15 +1004,18 @@ const SuperAdminDashboard = () => {
                     <YAxis stroke="#ffffff60" />
                     <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '12px' }} />
                     <Legend />
-                    <Area type="monotone" dataKey="created" stroke="#8884d8" fillOpacity={1} fill="url(#colorCreated)" />
-                    <Area type="monotone" dataKey="solved" stroke="#00C49F" fillOpacity={1} fill="url(#colorSolved)" />
+                    <Area type="monotone" dataKey="created" stroke="#8884d8" fillOpacity={1} fill="url(#colorCreated)" name="Created" />
+                    <Area type="monotone" dataKey="solved" stroke="#00C49F" fillOpacity={1} fill="url(#colorSolved)" name="Solved" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
 
               {/* Status Distribution */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-                <h3 className="text-xl font-bold text-white mb-4">📊 Status Distribution</h3>
+              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">📊</span>
+                  Status Distribution
+                </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -1071,288 +1043,185 @@ const SuperAdminDashboard = () => {
             </div>
 
             {/* Department Performance Cards */}
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-              <h3 className="text-xl font-bold text-white mb-6">🏢 Department Performance</h3>
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
+              <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                <span className="text-3xl">🏢</span>
+                Department Performance Matrix
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {analytics.deptPerformance.map(dept => (
-                  <div key={dept.name} className="bg-gradient-to-br from-white/5 to-white/10 rounded-xl p-5 border border-white/20 hover:border-[#ED1B2F]/50 transition-all">
-                    <h4 className="text-white font-bold text-lg mb-3">{dept.name}</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-white/60 text-sm">Total Tickets</span>
-                        <span className="text-white font-semibold">{dept.total}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-white/60 text-sm">Solved</span>
-                        <span className="text-green-400 font-semibold">{dept.solved}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-white/60 text-sm">Efficiency</span>
-                        <span className="text-purple-400 font-semibold">{dept.efficiency}%</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-white/60 text-sm">Avg Time</span>
-                        <span className="text-purple-400 font-semibold">{formatTime(dept.avgTime)}</span>
+                {analytics.deptPerformance.map((dept, idx) => (
+                  <div key={dept.name} className="bg-gradient-to-br from-white/10 to-white/5 rounded-2xl p-6 border border-white/20 hover:border-[#ED1B2F]/50 transition-all transform hover:scale-105 shadow-lg group">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-white font-bold text-lg">{dept.name}</h4>
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#ED1B2F] to-[#455185] flex items-center justify-center text-white font-bold shadow-lg">
+                        {idx + 1}
                       </div>
                     </div>
-                    {/* Progress Bar */}
-                    <div className="mt-3 bg-white/10 rounded-full h-2 overflow-hidden">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-white/60 text-sm flex items-center gap-2">
+                          <span>🎫</span> Total Tickets
+                        </span>
+                        <span className="text-white font-semibold text-lg">{dept.total}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-white/60 text-sm flex items-center gap-2">
+                          <span>✅</span> Solved
+                        </span>
+                        <span className="text-green-400 font-semibold text-lg">{dept.solved}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-white/60 text-sm flex items-center gap-2">
+                          <span>📊</span> Efficiency
+                        </span>
+                        <span className="text-purple-400 font-semibold text-lg">{dept.efficiency}%</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-white/60 text-sm flex items-center gap-2">
+                          <span>⏱️</span> Avg Time
+                        </span>
+                        <span className="text-blue-400 font-semibold text-lg">{formatTime(dept.avgTime)}</span>
+                      </div>
+                    </div>
+                    {/* Enhanced Progress Bar */}
+                    <div className="mt-4 bg-white/10 rounded-full h-3 overflow-hidden shadow-inner">
                       <div 
-                        className="bg-gradient-to-r from-[#ED1B2F] to-[#455185] h-full transition-all"
+                        className="h-full bg-gradient-to-r from-[#ED1B2F] via-purple-500 to-[#455185] transition-all duration-1000 rounded-full shadow-lg"
                         style={{ width: `${dept.efficiency}%` }}
                       ></div>
                     </div>
+                    <div className="mt-2 text-center text-white/40 text-xs font-medium">Performance Score</div>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            {/* Dynamic Insights Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* System Health Score */}
-              <SystemHealthScore score={analytics.healthScore} label="System Health" />
-
-              {/* Top Performers */}
-              <div className="bg-gradient-to-br from-indigo-500/20 to-indigo-600/10 backdrop-blur-xl rounded-2xl p-6 border border-indigo-500/30 hover:scale-[1.02] transition-all duration-300">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-white font-bold">🏆 Top Performers</h4>
-                  <span className="text-indigo-400/60 text-xs">This period</span>
-                </div>
-                <div className="space-y-3">
-                  {analytics.topPerformers.length > 0 ? analytics.topPerformers.map((performer, idx) => (
-                    <div key={performer.admin._id} className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                        idx === 0 ? 'bg-yellow-500 text-yellow-900' : idx === 1 ? 'bg-gray-300 text-gray-700' : 'bg-orange-400 text-orange-900'
-                      }`}>
-                        {idx + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white text-sm font-medium truncate">{performer.admin.name}</div>
-                        <div className="text-white/40 text-xs">{performer.solved} tickets resolved</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-indigo-400 text-sm font-medium">
-                          <AnimatedCounter value={performer.efficiency} decimals={0} suffix="%" />
-                        </div>
-                        <div className="text-white/40 text-xs">efficiency</div>
-                      </div>
-                    </div>
-                  )) : (
-                    <div className="text-white/40 text-sm text-center py-4">No data available</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Urgent Items Alert */}
-              <div className={`bg-gradient-to-br ${analytics.urgentItems.length > 0 ? 'from-red-500/20 to-red-600/10 border-red-500/30' : 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30'} backdrop-blur-xl rounded-2xl p-6 border hover:scale-[1.02] transition-all duration-300`}>
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-white font-bold flex items-center gap-2">
-                    {analytics.urgentItems.length > 0 ? '🚨' : '✅'} Urgent Items
-                    {analytics.urgentItems.length > 0 && <PulsingDot color="red" />}
-                  </h4>
-                  <span className={`text-xs ${analytics.urgentItems.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                    {analytics.urgentItems.length > 0 ? `${analytics.urgentItems.length} pending` : 'All clear'}
-                  </span>
-                </div>
-                {analytics.urgentItems.length > 0 ? (
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {analytics.urgentItems.slice(0, 5).map(item => (
-                      <div key={item._id} className="flex items-center gap-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                        <span className="text-red-400 text-xs px-2 py-0.5 bg-red-500/20 rounded">HIGH</span>
-                        <span className="text-white/80 text-sm truncate flex-1">{item.title}</span>
-                      </div>
-                    ))}
-                    {analytics.urgentItems.length > 5 && (
-                      <div className="text-red-400/60 text-xs text-center">+{analytics.urgentItems.length - 5} more</div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-4">
-                    <div className="text-4xl mb-2">🎉</div>
-                    <div className="text-emerald-400 text-sm">No high-priority pending tickets!</div>
-                    <div className="text-white/40 text-xs mt-1">Great job, team!</div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Real-time Activity Feed */}
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  📡 Real-time Activity Feed
-                  <PulsingDot color="green" />
-                </h3>
-                <span className="text-white/40 text-xs">Last 24 hours</span>
-              </div>
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                {analytics.recentActivity.length > 0 ? analytics.recentActivity.map(activity => {
-                  const getActivityIcon = (status) => {
-                    switch(status) {
-                      case 'pending': return { icon: '🆕', color: 'text-blue-400', bg: 'bg-blue-500/20' };
-                      case 'assigned': return { icon: '👤', color: 'text-purple-400', bg: 'bg-purple-500/20' };
-                      case 'in-progress': return { icon: '⚙️', color: 'text-yellow-400', bg: 'bg-yellow-500/20' };
-                      case 'resolved': case 'solved': return { icon: '✅', color: 'text-green-400', bg: 'bg-green-500/20' };
-                      default: return { icon: '📋', color: 'text-gray-400', bg: 'bg-gray-500/20' };
-                    }
-                  };
-                  const activityInfo = getActivityIcon(activity.status);
-                  const timeAgo = (date) => {
-                    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-                    if (seconds < 60) return `${seconds}s ago`;
-                    const minutes = Math.floor(seconds / 60);
-                    if (minutes < 60) return `${minutes}m ago`;
-                    const hours = Math.floor(minutes / 60);
-                    if (hours < 24) return `${hours}h ago`;
-                    return `${Math.floor(hours / 24)}d ago`;
-                  };
-                  
-                  return (
-                    <div key={activity._id} className="flex items-center gap-4 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors group">
-                      <div className={`w-10 h-10 rounded-full ${activityInfo.bg} flex items-center justify-center text-lg group-hover:scale-110 transition-transform`}>
-                        {activityInfo.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium text-sm truncate">{activity.title}</div>
-                        <div className="text-white/40 text-xs flex items-center gap-2">
-                          <span className={`${activityInfo.color}`}>{activity.status}</span>
-                          <span>•</span>
-                          <span>{activity.department?.name || 'General'}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-white/60 text-xs">{timeAgo(activity.updatedAt)}</div>
-                        <div className={`text-xs px-2 py-0.5 rounded mt-1 ${getPriorityColor(activity.priority)}`}>
-                          {activity.priority}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }) : (
-                  <div className="text-white/40 text-sm text-center py-8">No recent activity in the last 24 hours</div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Stats Summary */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white/5 backdrop-blur-xl rounded-xl p-4 border border-white/10 text-center hover:bg-white/10 transition-colors">
-                <div className="text-2xl mb-1">👥</div>
-                <div className="text-2xl font-bold text-white"><AnimatedCounter value={users.filter(u => u.role === 'admin').length} /></div>
-                <div className="text-white/40 text-xs">Active Admins</div>
-              </div>
-              <div className="bg-white/5 backdrop-blur-xl rounded-xl p-4 border border-white/10 text-center hover:bg-white/10 transition-colors">
-                <div className="text-2xl mb-1">🏢</div>
-                <div className="text-2xl font-bold text-white"><AnimatedCounter value={departments.length} /></div>
-                <div className="text-white/40 text-xs">Departments</div>
-              </div>
-              <div className="bg-white/5 backdrop-blur-xl rounded-xl p-4 border border-white/10 text-center hover:bg-white/10 transition-colors">
-                <div className="text-2xl mb-1">📝</div>
-                <div className="text-2xl font-bold text-white"><AnimatedCounter value={analytics.statusDist.pending} /></div>
-                <div className="text-white/40 text-xs">Pending Now</div>
-              </div>
-              <div className="bg-white/5 backdrop-blur-xl rounded-xl p-4 border border-white/10 text-center hover:bg-white/10 transition-colors">
-                <div className="text-2xl mb-1">⚡</div>
-                <div className="text-2xl font-bold text-white"><AnimatedCounter value={analytics.statusDist.assigned} /></div>
-                <div className="text-white/40 text-xs">In Progress</div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Solution Directory Tab */}
+        {/* Solution Directory Tab - Enhanced */}
         {activeTab === 'solutions' && (
           <div className="space-y-6">
             {/* Solution Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 backdrop-blur-xl rounded-2xl p-4 border border-green-500/30">
-                <div className="flex items-center gap-3">
-                  <div className="text-green-400 text-2xl">📚</div>
-                  <div>
-                    <div className="text-2xl font-bold text-white">{solutionStats.total}</div>
-                    <div className="text-green-300/70 text-sm">Total Solutions</div>
+            {(() => {
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <div className="bg-gradient-to-br from-green-600/30 to-green-800/20 backdrop-blur-xl rounded-2xl p-5 border border-green-500/40 hover:border-green-400/60 transition-all transform hover:scale-105 shadow-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="text-green-400 text-4xl">📚</div>
+                      <div>
+                        <div className="text-3xl font-bold text-white">{solutionStats.total}</div>
+                        <div className="text-green-300/70 text-sm font-medium">Total Solutions</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-yellow-600/30 to-yellow-800/20 backdrop-blur-xl rounded-2xl p-5 border border-yellow-500/40 hover:border-yellow-400/60 transition-all transform hover:scale-105 shadow-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="text-yellow-400 text-4xl">⭐</div>
+                      <div>
+                        <div className="text-3xl font-bold text-white">{solutionStats.avgRating.toFixed(1)}</div>
+                        <div className="text-yellow-300/70 text-sm font-medium">Avg Rating</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-600/30 to-orange-800/20 backdrop-blur-xl rounded-2xl p-5 border border-orange-500/40 hover:border-orange-400/60 transition-all transform hover:scale-105 shadow-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="text-orange-400 text-4xl">📝</div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="text-3xl font-bold text-white">{solutionStats.reviewsCount}</div>
+                          {solutionStats.pendingReviews > 0 && (
+                            <span className="px-2 py-0.5 bg-red-500/30 text-red-300 text-xs rounded-full">{solutionStats.pendingReviews} pending</span>
+                          )}
+                        </div>
+                        <div className="text-orange-300/70 text-sm font-medium">Reviews</div>
+                        <div className="flex gap-0.5 mt-1">
+                          {[5,4,3,2,1].map(star => (
+                            <div key={star} className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden" title={`${star} star: ${solutionStats.ratingDistribution[star]}`}>
+                              <div 
+                                className="h-full bg-yellow-400 rounded-full" 
+                                style={{ width: solutionStats.reviewsCount > 0 ? `${(solutionStats.ratingDistribution[star] / solutionStats.reviewsCount) * 100}%` : '0%' }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-600/30 to-purple-800/20 backdrop-blur-xl rounded-2xl p-5 border border-purple-500/40 hover:border-purple-400/60 transition-all transform hover:scale-105 shadow-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="text-purple-400 text-4xl">⚡</div>
+                      <div>
+                        <div className="text-3xl font-bold text-white">{formatTime(solutionStats.avgTime)}</div>
+                        <div className="text-purple-300/70 text-sm font-medium">Avg Resolution</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-blue-600/30 to-blue-800/20 backdrop-blur-xl rounded-2xl p-5 border border-blue-500/40 hover:border-blue-400/60 transition-all transform hover:scale-105 shadow-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="text-blue-400 text-4xl">🏷️</div>
+                      <div>
+                        <div className="text-3xl font-bold text-white">{solutionStats.categories.length}</div>
+                        <div className="text-blue-300/70 text-sm font-medium">Categories</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-pink-600/30 to-pink-800/20 backdrop-blur-xl rounded-2xl p-5 border border-pink-500/40 hover:border-pink-400/60 transition-all transform hover:scale-105 shadow-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="text-pink-400 text-4xl">🏆</div>
+                      <div>
+                        <div className="text-lg font-bold text-white truncate">{solutionStats.topSolverName}</div>
+                        <div className="text-pink-300/70 text-sm font-medium">Top Solver</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 backdrop-blur-xl rounded-2xl p-4 border border-yellow-500/30">
-                <div className="flex items-center gap-3">
-                  <div className="text-yellow-400 text-2xl">⭐</div>
-                  <div>
-                    <div className="text-2xl font-bold text-white">{solutionStats.avgRating.toFixed(1)}</div>
-                    <div className="text-yellow-300/70 text-sm">Avg Rating</div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/30">
-                <div className="flex items-center gap-3">
-                  <div className="text-purple-400 text-2xl">⚡</div>
-                  <div>
-                    <div className="text-2xl font-bold text-white">{formatTime(solutionStats.avgTime)}</div>
-                    <div className="text-purple-300/70 text-sm">Avg Resolution</div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 backdrop-blur-xl rounded-2xl p-4 border border-blue-500/30">
-                <div className="flex items-center gap-3">
-                  <div className="text-blue-400 text-2xl">🏷️</div>
-                  <div>
-                    <div className="text-2xl font-bold text-white">{solutionStats.categories.length}</div>
-                    <div className="text-blue-300/70 text-sm">Categories</div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gradient-to-br from-pink-500/20 to-pink-600/10 backdrop-blur-xl rounded-2xl p-4 border border-pink-500/30">
-                <div className="flex items-center gap-3">
-                  <div className="text-pink-400 text-2xl">🏆</div>
-                  <div>
-                    <div className="text-lg font-bold text-white truncate">{solutionStats.topSolverName}</div>
-                    <div className="text-pink-300/70 text-sm">Top Solver</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
               <div className="flex flex-col gap-4 mb-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
-                    <h3 className="text-2xl font-bold text-white">💡 Solution Directory</h3>
-                    <p className="text-white/60 text-sm mt-1">Browse resolved tickets with detailed solutions</p>
+                    <h3 className="text-3xl font-bold text-white flex items-center gap-2">
+                      <span className="text-4xl">💡</span>
+                      Solution Knowledge Base
+                    </h3>
+                    <p className="text-white/60 text-sm mt-2">Browse resolved tickets with detailed solutions & insights</p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSolutionViewMode('detailed')}
-                      className={`px-3 py-2 rounded-lg transition-all ${solutionViewMode === 'detailed' ? 'bg-[#ED1B2F] text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                      className={`px-4 py-2 rounded-lg transition-all font-semibold ${solutionViewMode === 'detailed' ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white shadow-lg' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
                       title="Detailed View"
                     >
-                      📋
+                      <span className="text-xl">📋</span>
                     </button>
                     <button
                       onClick={() => setSolutionViewMode('compact')}
-                      className={`px-3 py-2 rounded-lg transition-all ${solutionViewMode === 'compact' ? 'bg-[#ED1B2F] text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                      className={`px-4 py-2 rounded-lg transition-all font-semibold ${solutionViewMode === 'compact' ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white shadow-lg' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
                       title="Compact View"
                     >
-                      📝
+                      <span className="text-xl">📝</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Filters Row */}
+                {/* Enhanced Filters Row */}
                 <div className="flex flex-wrap gap-3">
                   <input
                     type="text"
-                    placeholder="Search solutions..."
+                    placeholder="🔍 Search solutions..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] flex-1 min-w-[200px]"
+                    className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] flex-1 min-w-[200px] font-medium"
                   />
                   <select
                     value={filters.department}
                     onChange={(e) => setFilters({ ...filters, department: e.target.value })}
-                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                    className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] font-medium"
                   >
-                    <option value="all" className="text-gray-900">All Departments</option>
+                    <option value="all" className="text-gray-900">🏢 All Departments</option>
                     {departments.map(dept => (
                       <option key={dept._id} value={dept._id} className="text-gray-900">{dept.name}</option>
                     ))}
@@ -1360,9 +1229,9 @@ const SuperAdminDashboard = () => {
                   <select
                     value={solutionCategoryFilter}
                     onChange={(e) => setSolutionCategoryFilter(e.target.value)}
-                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                    className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] font-medium"
                   >
-                    <option value="all" className="text-gray-900">All Categories</option>
+                    <option value="all" className="text-gray-900">📁 All Categories</option>
                     {solutionStats.categories.map(cat => (
                       <option key={cat} value={cat} className="text-gray-900">{cat}</option>
                     ))}
@@ -1370,18 +1239,18 @@ const SuperAdminDashboard = () => {
                   <select
                     value={solutionPriorityFilter}
                     onChange={(e) => setSolutionPriorityFilter(e.target.value)}
-                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                    className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] font-medium"
                   >
-                    <option value="all" className="text-gray-900">All Priorities</option>
-                    <option value="high" className="text-gray-900">High Priority</option>
-                    <option value="medium" className="text-gray-900">Medium Priority</option>
-                    <option value="low" className="text-gray-900">Low Priority</option>
+                    <option value="all" className="text-gray-900">🎯 All Priorities</option>
+                    <option value="high" className="text-gray-900">🔴 High Priority</option>
+                    <option value="medium" className="text-gray-900">🟡 Medium Priority</option>
+                    <option value="low" className="text-gray-900">🟢 Low Priority</option>
                   </select>
                 </div>
 
                 {/* Sort Controls */}
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-white/60 text-sm">Sort by:</span>
+                  <span className="text-white/60 text-sm font-semibold">Sort by:</span>
                   <div className="flex flex-wrap gap-2">
                     {[
                       { id: 'date', label: 'Date', icon: '📅' },
@@ -1399,9 +1268,9 @@ const SuperAdminDashboard = () => {
                             setSolutionSortOrder('desc');
                           }
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-sm transition-all flex items-center gap-1 ${
+                        className={`px-4 py-2 rounded-xl text-sm transition-all flex items-center gap-2 font-semibold ${
                           solutionSortBy === sort.id
-                            ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white'
+                            ? 'bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white shadow-lg'
                             : 'bg-white/10 text-white/60 hover:bg-white/20'
                         }`}
                       >
@@ -1418,8 +1287,8 @@ const SuperAdminDashboard = () => {
 
               {/* Solution Cards */}
               <div className="space-y-4">
-                {filteredSolutions.map(token => (
-                  <div key={token._id} className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20 hover:border-green-500/50 transition-all">
+                {getFilteredAndSortedSolutions().map(token => (
+                  <div key={token._id} className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20 hover:border-green-500/50 transition-all shadow-lg">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2 flex-wrap">
@@ -1437,7 +1306,7 @@ const SuperAdminDashboard = () => {
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-2 text-sm text-white/60 mb-3">
-                          <span className="bg-white/10 px-2 py-1 rounded">#{token.tokenNumber || token._id.slice(-8)}</span>
+                          <span className="bg-white/10 px-2 py-1 rounded">#{token.ticketNumber || token._id.slice(-8)}</span>
                           {token.department && (
                             <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded">{token.department.name}</span>
                           )}
@@ -1547,7 +1416,7 @@ const SuperAdminDashboard = () => {
                   </div>
                 ))}
 
-                {filteredSolutions.length === 0 && (
+                {getFilteredAndSortedSolutions().length === 0 && (
                   <div className="text-center py-16 bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10">
                     <div className="text-6xl mb-4">📚</div>
                     <h3 className="text-2xl font-bold text-white/80 mb-2">No Solutions Found</h3>
@@ -1559,13 +1428,16 @@ const SuperAdminDashboard = () => {
           </div>
         )}
 
-        {/* Analytics Tab */}
+        {/* Analytics Tab - Enhanced */}
         {activeTab === 'analytics' && analytics && (
           <div className="space-y-6">
             {/* Admin Performance Table */}
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold text-white">👨‍💼 Admin Performance Analytics</h3>
+                <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                  <span className="text-3xl">👨‍💼</span>
+                  Admin Performance Analytics
+                </h3>
                 <select
                   value={filters.adminPerformance}
                   onChange={(e) => setFilters({ ...filters, adminPerformance: e.target.value })}
@@ -1668,8 +1540,11 @@ const SuperAdminDashboard = () => {
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Priority Distribution */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-                <h3 className="text-xl font-bold text-white mb-4">🎯 Priority Distribution</h3>
+              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🎯</span>
+                  Priority Distribution
+                </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={[
                     { name: 'High', value: analytics.priorityDist.high, fill: '#EF4444' },
@@ -1690,8 +1565,11 @@ const SuperAdminDashboard = () => {
               </div>
 
               {/* Department Efficiency Radar */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
-                <h3 className="text-xl font-bold text-white mb-4">📡 Department Efficiency</h3>
+              <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">📡</span>
+                  Department Efficiency Radar
+                </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <RadarChart data={analytics.deptPerformance}>
                     <PolarGrid stroke="#ffffff20" />
@@ -1706,19 +1584,165 @@ const SuperAdminDashboard = () => {
           </div>
         )}
 
+        {/* Companies Tab */}
+        {activeTab === 'companies' && (
+          <div className="space-y-6">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <span className="text-3xl">🏪</span>
+                    Company Directory
+                  </h3>
+                  <p className="text-white/60 text-sm mt-2">Analytics for all companies using the support system</p>
+                </div>
+                <button
+                  onClick={refreshCompanies}
+                  className="px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
+                >
+                  <span className="mr-2">🔄</span>
+                  Refresh Analytics
+                </button>
+              </div>
+
+              {/* Company Stats Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 backdrop-blur-xl rounded-xl p-4 border border-blue-500/30">
+                  <div className="text-blue-400 text-2xl mb-2">🏪</div>
+                  <div className="text-2xl font-bold text-white">{companies.length}</div>
+                  <div className="text-blue-300/70 text-sm">Total Companies</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 backdrop-blur-xl rounded-xl p-4 border border-green-500/30">
+                  <div className="text-green-400 text-2xl mb-2">👥</div>
+                  <div className="text-2xl font-bold text-white">
+                    {companies.reduce((sum, c) => sum + c.employeeCount, 0)}
+                  </div>
+                  <div className="text-green-300/70 text-sm">Total Employees</div>
+                </div>
+                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 backdrop-blur-xl rounded-xl p-4 border border-purple-500/30">
+                  <div className="text-purple-400 text-2xl mb-2">🎫</div>
+                  <div className="text-2xl font-bold text-white">
+                    {companies.reduce((sum, c) => sum + c.totalTickets, 0)}
+                  </div>
+                  <div className="text-purple-300/70 text-sm">Total Tickets</div>
+                </div>
+                <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 backdrop-blur-xl rounded-xl p-4 border border-yellow-500/30">
+                  <div className="text-yellow-400 text-2xl mb-2">⭐</div>
+                  <div className="text-2xl font-bold text-white">
+                    {companies.length > 0 
+                      ? (companies.reduce((sum, c) => sum + c.averageRating, 0) / companies.length).toFixed(1)
+                      : '0.0'}
+                  </div>
+                  <div className="text-yellow-300/70 text-sm">Avg Rating</div>
+                </div>
+              </div>
+
+              {/* Companies Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/20">
+                      <th className="text-left py-4 px-4 text-white/80 font-semibold">Company</th>
+                      <th className="text-center py-4 px-4 text-white/80 font-semibold">Employees</th>
+                      <th className="text-center py-4 px-4 text-white/80 font-semibold">Total Tickets</th>
+                      <th className="text-center py-4 px-4 text-white/80 font-semibold">Resolved</th>
+                      <th className="text-center py-4 px-4 text-white/80 font-semibold">Avg Support Time</th>
+                      <th className="text-center py-4 px-4 text-white/80 font-semibold">Avg Rating</th>
+                      <th className="text-center py-4 px-4 text-white/80 font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {companies.map((company) => (
+                      <tr
+                        key={company._id}
+                        className="border-b border-white/10 hover:bg-white/5 transition-all"
+                      >
+                        <td className="py-4 px-4">
+                          <div>
+                            <div className="text-white font-semibold text-lg">{company.name}</div>
+                            <div className="text-white/50 text-xs">{company.domain}</div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm font-semibold">
+                            {company.employeeCount}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm font-semibold">
+                            {company.totalTickets}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-semibold">
+                              {company.resolvedTickets}
+                            </span>
+                            <span className="text-white/40 text-xs">
+                              {company.totalTickets > 0 
+                                ? `${((company.resolvedTickets / company.totalTickets) * 100).toFixed(0)}%`
+                                : '0%'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="text-orange-400 font-semibold">
+                            {formatTime(company.averageSupportTime)}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          {company.averageRating > 0 ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <span className="text-yellow-400 font-bold">{company.averageRating.toFixed(1)}</span>
+                              <span className="text-yellow-400">⭐</span>
+                            </div>
+                          ) : (
+                            <span className="text-white/30">-</span>
+                          )}
+                        </td>
+                        <td className="py-4 px-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => viewCompanyDetails(company._id)}
+                              className="px-3 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-sm transition-colors"
+                            >
+                              👁️ View Details
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {companies.length === 0 && (
+                <div className="text-center py-16">
+                  <div className="text-6xl mb-4">🏪</div>
+                  <h3 className="text-2xl font-bold text-white/80 mb-2">No Companies Found</h3>
+                  <p className="text-white/60 mb-4">Click "Refresh Analytics" to analyze companies from user emails</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Departments Tab */}
         {activeTab === 'departments' && (
           <div className="space-y-6">
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold text-white">🏢 Department Management</h3>
+                <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                  <span className="text-3xl">🏢</span>
+                  Department Management
+                </h3>
                 <button
                   onClick={() => {
                     setShowDeptModal(true);
                     setEditingDept(null);
                     setNewDept({ name: '', description: '', categories: [] });
                   }}
-                  className="px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+                  className="px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
                 >
                   <span className="mr-2">➕</span>
                   New Department
@@ -1727,8 +1751,8 @@ const SuperAdminDashboard = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {departments.map(dept => {
-                  const deptTokens = tokens.filter(t => t.department?._id === dept._id);
-                  const solved = deptTokens.filter(t => t.status === 'resolved' || t.status === 'solved').length;
+                  const depttickets = tickets.filter(t => t.department?._id === dept._id);
+                  const solved = depttickets.filter(t => t.status === 'solved').length;
 
                   return (
                     <div key={dept._id} className="bg-gradient-to-br from-white/5 to-white/10 rounded-xl p-6 border border-white/20 hover:border-[#ED1B2F]/50 transition-all group">
@@ -1778,7 +1802,7 @@ const SuperAdminDashboard = () => {
                       <div className="grid grid-cols-2 gap-3 mb-3">
                         <div className="bg-white/5 rounded-lg p-2">
                           <div className="text-white/50 text-xs">Total</div>
-                          <div className="text-white font-bold text-lg">{deptTokens.length}</div>
+                          <div className="text-white font-bold text-lg">{depttickets.length}</div>
                         </div>
                         <div className="bg-green-500/10 rounded-lg p-2">
                           <div className="text-green-400/70 text-xs">Solved</div>
@@ -1789,7 +1813,7 @@ const SuperAdminDashboard = () => {
                       <div className="bg-white/10 rounded-full h-2 overflow-hidden">
                         <div 
                           className="bg-gradient-to-r from-green-500 to-emerald-500 h-full transition-all"
-                          style={{ width: `${deptTokens.length ? (solved / deptTokens.length * 100) : 0}%` }}
+                          style={{ width: `${depttickets.length ? (solved / depttickets.length * 100) : 0}%` }}
                         ></div>
                       </div>
                     </div>
@@ -1803,10 +1827,13 @@ const SuperAdminDashboard = () => {
         {/* Admins Tab */}
         {activeTab === 'admins' && (
           <div className="space-y-6">
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                 <div>
-                  <h3 className="text-2xl font-bold text-white">👥 Admin Team Management</h3>
+                  <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <span className="text-3xl">👥</span>
+                    Admin Team Management
+                  </h3>
                   <p className="text-white/60 text-sm mt-1">Manage admin profiles and monitor performance</p>
                 </div>
 
@@ -1831,11 +1858,8 @@ const SuperAdminDashboard = () => {
                   <button
                     onClick={() => {
                       setShowAdminProfileForm(true);
-                      setEditingAdmin(null);
-                      setNewAdminProfile({ 
-                        name: '', email: '', password: '', expertise: [], 
-                        department: '', categories: [], phone: '', employeeId: '' 
-                      });
+                      setEditingAdmin(false);
+                      setNewAdminProfile({ name: '', email: '', password: '', expertise: [], department: '', categories: [], phone: '', employeeId: '' });
                     }}
                     className="px-6 py-2 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-lg transition-all shadow-lg whitespace-nowrap"
                   >
@@ -1871,10 +1895,10 @@ const SuperAdminDashboard = () => {
                   <div className="text-yellow-400 text-2xl mb-2">⭐</div>
                   <div className="text-2xl font-bold text-white">
                     {(() => {
-                      const tokensWithFeedback = tokens.filter(t => t.feedback?.rating);
-                      if (tokensWithFeedback.length === 0) return '0.0';
-                      const totalRating = tokensWithFeedback.reduce((sum, t) => sum + t.feedback.rating, 0);
-                      return (totalRating / tokensWithFeedback.length).toFixed(1);
+                      const ticketsWithFeedback = tickets.filter(t => t.feedback?.rating);
+                      if (ticketsWithFeedback.length === 0) return '0.0';
+                      const totalRating = ticketsWithFeedback.reduce((sum, t) => sum + t.feedback.rating, 0);
+                      return (totalRating / ticketsWithFeedback.length).toFixed(1);
                     })()}
                   </div>
                   <div className="text-yellow-300/70 text-sm">Avg Rating</div>
@@ -1888,7 +1912,7 @@ const SuperAdminDashboard = () => {
                     <tr className="border-b border-white/20">
                       <th className="text-left py-4 px-4 text-white/80 font-semibold">Admin Name</th>
                       <th className="text-left py-4 px-4 text-white/80 font-semibold">Department</th>
-                      <th className="text-center py-4 px-4 text-white/80 font-semibold">Total Tokens</th>
+                      <th className="text-center py-4 px-4 text-white/80 font-semibold">Total tickets</th>
                       <th className="text-center py-4 px-4 text-white/80 font-semibold">Solved</th>
                       <th className="text-center py-4 px-4 text-white/80 font-semibold">Avg Time</th>
                       <th className="text-center py-4 px-4 text-white/80 font-semibold">Rating</th>
@@ -1905,17 +1929,18 @@ const SuperAdminDashboard = () => {
                         (filters.department === 'all' || u.department?._id === filters.department)
                       )
                       .map(admin => {
-                        const adminTokens = tokens.filter(t => t.assignedTo?._id === admin._id || t.solvedBy?._id === admin._id);
-                        const solvedTokens = adminTokens.filter(t => t.status === 'resolved' || t.status === 'solved');
-                        const tokensWithTime = solvedTokens.filter(t => t.timeToSolve && t.timeToSolve > 0);
-                        const tokensWithRating = adminTokens.filter(t => t.feedback?.rating);
-                        
-                        const avgTime = tokensWithTime.length > 0 
-                          ? tokensWithTime.reduce((sum, t) => sum + t.timeToSolve, 0) / tokensWithTime.length 
+                        const admintickets = tickets.filter(t => t.assignedTo?._id === admin._id || t.solvedBy?._id === admin._id);
+                        const solvedtickets = admintickets.filter(t => t.status === 'resolved');
+                        // Only calculate average for resolved tickets with valid timeToSolve
+                        const ticketsWithTime = solvedtickets.filter(t => t.timeToSolve && t.timeToSolve > 0);
+                        const ticketsWithRating = admintickets.filter(t => t.feedback?.rating);
+
+                        const avgTime = ticketsWithTime.length > 0 
+                          ? ticketsWithTime.reduce((sum, t) => sum + t.timeToSolve, 0) / ticketsWithTime.length 
                           : 0;
-                        
-                        const avgRating = tokensWithRating.length > 0
-                          ? tokensWithRating.reduce((sum, t) => sum + t.feedback.rating, 0) / tokensWithRating.length
+
+                        const avgRating = ticketsWithRating.length > 0
+                          ? ticketsWithRating.reduce((sum, t) => sum + t.feedback.rating, 0) / ticketsWithRating.length
                           : 0;
 
                         const adminProfile = adminProfiles.find(p => p.user?._id === admin._id);
@@ -1941,12 +1966,12 @@ const SuperAdminDashboard = () => {
                             </td>
                             <td className="py-4 px-4 text-center">
                               <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm font-semibold">
-                                {adminTokens.length}
+                                {admintickets.length}
                               </span>
                             </td>
                             <td className="py-4 px-4 text-center">
                               <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-semibold">
-                                {solvedTokens.length}
+                                {solvedtickets.length}
                               </span>
                             </td>
                             <td className="py-4 px-4 text-center">
@@ -2021,10 +2046,13 @@ const SuperAdminDashboard = () => {
         {/* Users Tab */}
         {activeTab === 'users' && (
           <div className="space-y-6">
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                 <div>
-                  <h3 className="text-2xl font-bold text-white">👤 User Management</h3>
+                  <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <span className="text-3xl">👤</span>
+                    User Management
+                  </h3>
                   <p className="text-white/60 text-sm mt-1">Manage regular users, view details, and control access</p>
                 </div>
 
@@ -2131,7 +2159,7 @@ const SuperAdminDashboard = () => {
                               >
                                 👁️ View
                               </button>
-                              {userItem._id !== user?._id && (
+                              {userItem._id !== user._id && (
                                 <>
                                   {(!userItem.status || userItem.status === 'active') ? (
                                     <>
@@ -2181,12 +2209,15 @@ const SuperAdminDashboard = () => {
           </div>
         )}
 
-        {/* Tokens Tab */}
-        {activeTab === 'tokens' && (
+        {/* tickets Tab */}
+        {activeTab === 'tickets' && (
           <div className="space-y-6">
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                <h3 className="text-2xl font-bold text-white">🎫 All Support Tickets</h3>
+                <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                  <span className="text-3xl">🎫</span>
+                  All Support Tickets
+                </h3>
 
                 <div className="flex flex-wrap gap-3">
                   <select
@@ -2237,11 +2268,11 @@ const SuperAdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredTokensList.slice(0, 20).map(token => (
+                    {filteredticketsList.slice(0, 20).map(token => (
                       <tr
                         key={token._id}
                         onClick={() => {
-                          setSelectedToken(token);
+                          setselectedTicket(token);
                           setShowTokenDetailModal(true);
                         }}
                         className="border-b border-white/10 hover:bg-white/5 transition-all cursor-pointer"
@@ -2249,7 +2280,7 @@ const SuperAdminDashboard = () => {
                         <td className="py-4 px-4">
                           <div>
                             <div className="text-white font-semibold">{token.title}</div>
-                            <div className="text-white/40 text-xs font-mono">#{token.tokenNumber || token._id.slice(-8)}</div>
+                            <div className="text-white/40 text-xs font-mono">#{token.ticketNumber || token._id.slice(-8)}</div>
                           </div>
                         </td>
                         <td className="py-4 px-4">
@@ -2259,11 +2290,7 @@ const SuperAdminDashboard = () => {
                           <span className="text-white/70">{token.department?.name || 'N/A'}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            token.status === 'resolved' || token.status === 'solved' ? 'bg-green-500/20 text-green-400' :
-                            token.status === 'assigned' ? 'bg-blue-500/20 text-blue-400' :
-                            'bg-yellow-500/20 text-yellow-400'
-                          }`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(token.status)}`}>
                             {token.status}
                           </span>
                         </td>
@@ -2292,97 +2319,46 @@ const SuperAdminDashboard = () => {
                 </table>
               </div>
 
-              {filteredTokensList.length > 20 && (
+              {filteredticketsList.length > 20 && (
                 <div className="mt-4 text-center text-white/60">
-                  Showing 20 of {filteredTokensList.length} tickets
+                  Showing 20 of {filteredticketsList.length} tickets
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* All modals remain the same but are included for completeness */}
         {/* Department Modal */}
         {showDeptModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowDeptModal(false)}>
-            <div className="bg-gradient-to-br from-[#1a1f3a] to-[#2a2f4a] rounded-2xl p-8 max-w-2xl w-full border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-2xl font-bold text-white mb-6">
-                {editingDept ? '✏️ Edit Department' : '➕ New Department'}
-              </h3>
-
-              <form onSubmit={saveDepartment} className="space-y-4">
+            <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
+                <h3 className="text-2xl font-bold text-white">{editingDept ? 'Edit Department' : 'Create Department'}</h3>
+                <button onClick={() => setShowDeptModal(false)} className="text-white hover:text-gray-200 text-2xl">✕</button>
+              </div>
+              <form onSubmit={saveDepartment} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-white/80 mb-2">Department Name</label>
+                  <label className="block text-white/80 mb-2">Name *</label>
                   <input
                     type="text"
                     value={newDept.name}
-                    onChange={(e) => setNewDept({ ...newDept, name: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
-                    placeholder="e.g., Technical Support"
+                    onChange={(e) => setNewDept({...newDept, name: e.target.value})}
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-[#ED1B2F]"
                     required
                   />
                 </div>
-
                 <div>
                   <label className="block text-white/80 mb-2">Description</label>
                   <textarea
                     value={newDept.description}
-                    onChange={(e) => setNewDept({ ...newDept, description: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] h-24"
-                    placeholder="Brief description of the department"
+                    onChange={(e) => setNewDept({...newDept, description: e.target.value})}
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-[#ED1B2F]"
+                    rows="3"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-white/80 mb-2">Categories</label>
-                  <div className="space-y-2 bg-white/5 rounded-xl p-4 max-h-48 overflow-y-auto">
-                    {newDept.categories.map((cat, idx) => (
-                      <div key={cat._id} className="bg-white/10 rounded-lg p-3 flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="text-white font-medium">{cat.name}</div>
-                          {cat.subCategories?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {cat.subCategories.map((sub, sidx) => (
-                                <span key={sidx} className="text-xs text-white/60 bg-white/10 px-2 py-0.5 rounded">
-                                  {sub}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setNewDept({ ...newDept, categories: newDept.categories.filter((_, i) => i !== idx) })}
-                          className="text-red-400 hover:text-red-300 ml-2"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addCategoryToDept}
-                    className="mt-2 px-4 py-2 bg-[#455185]/30 hover:bg-[#455185]/50 text-white rounded-lg transition-colors w-full"
-                  >
-                    + Add Category
-                  </button>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowDeptModal(false)}
-                    className="flex-1 px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-colors"
-                  >
-                    {editingDept ? 'Update' : 'Create'}
-                  </button>
+                <div className="flex gap-4">
+                  <button type="button" onClick={() => setShowDeptModal(false)} className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg">Cancel</button>
+                  <button type="submit" className="flex-1 py-2 bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white rounded-lg">Save</button>
                 </div>
               </form>
             </div>
@@ -2391,126 +2367,262 @@ const SuperAdminDashboard = () => {
 
         {/* Admin Profile Form Modal */}
         {showAdminProfileForm && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => {setShowAdminProfileForm(false); setEditingAdmin(null);}}>
-            <div className="bg-gradient-to-br from-[#1a1f3a] to-[#2a2f4a] rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-2xl font-bold text-white mb-6">
-                {editingAdmin ? '✏️ Edit Admin Profile' : '➕ Create Admin Profile'}
-              </h3>
-
-              <form onSubmit={createAdminProfile} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAdminProfileForm(false)}>
+            <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
+                <h3 className="text-2xl font-bold text-white">{editingAdmin ? 'Edit Admin' : 'Create Admin'}</h3>
+                <button onClick={() => setShowAdminProfileForm(false)} className="text-white hover:text-gray-200 text-2xl">✕</button>
+              </div>
+              <form onSubmit={createAdminProfile} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-white/80 text-sm mb-2">Name *</label>
+                    <label className="block text-white/80 mb-2">Name *</label>
                     <input
                       type="text"
                       value={newAdminProfile.name}
-                      onChange={(e) => setNewAdminProfile({ ...newAdminProfile, name: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                      onChange={(e) => setNewAdminProfile({...newAdminProfile, name: e.target.value})}
+                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
                       required
-                      disabled={!!editingAdmin}
                     />
                   </div>
                   <div>
-                    <label className="block text-white/80 text-sm mb-2">Email *</label>
+                    <label className="block text-white/80 mb-2">Email *</label>
                     <input
                       type="email"
                       value={newAdminProfile.email}
-                      onChange={(e) => setNewAdminProfile({ ...newAdminProfile, email: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
+                      onChange={(e) => setNewAdminProfile({...newAdminProfile, email: e.target.value})}
+                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
                       required
-                      disabled={!!editingAdmin}
                     />
                   </div>
                   {!editingAdmin && (
                     <div>
-                      <label className="block text-white/80 text-sm mb-2">Password *</label>
+                      <label className="block text-white/80 mb-2">Password *</label>
                       <input
                         type="password"
                         value={newAdminProfile.password}
-                        onChange={(e) => setNewAdminProfile({ ...newAdminProfile, password: e.target.value })}
-                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
-                        required
-                        minLength="6"
+                        onChange={(e) => setNewAdminProfile({...newAdminProfile, password: e.target.value})}
+                        className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                        required={!editingAdmin}
                       />
                     </div>
                   )}
                   <div>
-                    <label className="block text-white/80 text-sm mb-2">Employee ID</label>
-                    <input
-                      type="text"
-                      value={newAdminProfile.employeeId}
-                      onChange={(e) => setNewAdminProfile({ ...newAdminProfile, employeeId: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-white/80 text-sm mb-2">Phone *</label>
-                    <input
-                      type="tel"
-                      value={newAdminProfile.phone}
-                      onChange={(e) => setNewAdminProfile({ ...newAdminProfile, phone: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-white/80 text-sm mb-2">Department *</label>
+                    <label className="block text-white/80 mb-2">Department</label>
                     <select
                       value={newAdminProfile.department}
-                      onChange={(e) => setNewAdminProfile({ ...newAdminProfile, department: e.target.value, categories: [] })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
-                      required
-                      disabled={!!editingAdmin}
+                      onChange={(e) => setNewAdminProfile({...newAdminProfile, department: e.target.value})}
+                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
                     >
-                      <option value="" className="text-gray-900">Select Department</option>
-                      {departments.map(dept => (
-                        <option key={dept._id} value={dept._id} className="text-gray-900">{dept.name}</option>
-                      ))}
+                      <option value="">Select Department</option>
+                      {departments.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
                     </select>
                   </div>
                 </div>
-
-                <div>
-                  <label className="block text-white/80 text-sm mb-2">Areas of Expertise</label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={newExpertise}
-                      onChange={(e) => setNewExpertise(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addExpertise())}
-                      className="flex-1 px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]"
-                      placeholder="e.g., Network Security"
-                    />
-                    <button type="button" onClick={addExpertise} className="px-4 py-2 bg-[#455185] hover:bg-[#3a456f] text-white rounded-lg transition-colors">
-                      Add
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {newAdminProfile.expertise.map((exp, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm flex items-center gap-2">
-                        {exp}
-                        <button type="button" onClick={() => setNewAdminProfile({ ...newAdminProfile, expertise: newAdminProfile.expertise.filter((_, i) => i !== idx) })} className="text-red-400 hover:text-red-300">✕</button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button type="button" onClick={() => {setShowAdminProfileForm(false); setEditingAdmin(null);}} className="flex-1 px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors">
-                    Cancel
-                  </button>
-                  <button type="submit" className="flex-1 px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl transition-colors">
-                    {editingAdmin ? 'Update Admin' : 'Create Admin'}
-                  </button>
+                <div className="flex gap-4">
+                  <button type="button" onClick={() => setShowAdminProfileForm(false)} className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg">Cancel</button>
+                  <button type="submit" className="flex-1 py-2 bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white rounded-lg">Save</button>
                 </div>
               </form>
             </div>
           </div>
         )}
 
-        {/* Token Detail Modal - Remaining modals would continue similarly */}
-        {/* For brevity, I've shown the pattern. The other modals would follow the same structure */}
+        {/* Token Detail Modal */}
+        {showTokenDetailModal && selectedTicket && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowTokenDetailModal(false)}>
+            <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
+                <h3 className="text-2xl font-bold text-white">Token Details</h3>
+                <button onClick={() => setShowTokenDetailModal(false)} className="text-white hover:text-gray-200 text-2xl">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="bg-white/5 rounded-xl p-4">
+                  <h4 className="text-xl font-bold text-white mb-2">{selectedTicket.title}</h4>
+                  <p className="text-white/70 mb-4">{selectedTicket.description}</p>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div><span className="text-white/60">Status:</span> <span className={`ml-2 px-2 py-1 rounded ${getStatusColor(selectedTicket.status)}`}>{selectedTicket.status}</span></div>
+                    <div><span className="text-white/60">Priority:</span> <span className="text-white ml-2">{selectedTicket.priority}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
+        {/* User Detail Modal */}
+        {showUserModal && selectedUser && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowUserModal(false)}>
+            <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
+                <h3 className="text-2xl font-bold text-white">User Details</h3>
+                <button onClick={() => setShowUserModal(false)} className="text-white hover:text-gray-200 text-2xl">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="bg-white/5 rounded-xl p-4">
+                  <h4 className="text-xl font-bold text-white mb-4">{selectedUser.name}</h4>
+                  <div className="space-y-2 text-sm">
+                    <div><span className="text-white/60">Email:</span> <span className="text-white ml-2">{selectedUser.email}</span></div>
+                    <div><span className="text-white/60">Status:</span> <span className="text-white ml-2">{selectedUser.status || 'active'}</span></div>
+                    <div><span className="text-white/60">Department:</span> <span className="text-white ml-2">{selectedUser.department?.name || 'N/A'}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Status Change Modal */}
+        {showStatusModal && selectedUser && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowStatusModal(false)}>
+            <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-md w-full border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
+                <h3 className="text-2xl font-bold text-white">Change User Status</h3>
+                <button onClick={() => setShowStatusModal(false)} className="text-white hover:text-gray-200 text-2xl">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-white/80 mb-2">Reason</label>
+                  <textarea
+                    value={statusAction.reason}
+                    onChange={(e) => setStatusAction({...statusAction, reason: e.target.value})}
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                    rows="3"
+                    placeholder="Provide a reason for this action..."
+                  />
+                </div>
+                <button
+                  onClick={() => updateUserStatus(selectedUser._id, statusAction.status, statusAction.reason)}
+                  className="w-full py-2 bg-gradient-to-r from-[#ED1B2F] to-[#455185] text-white rounded-lg"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Company Details Modal */}
+        {showCompanyModal && selectedCompany && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowCompanyModal(false)}>
+            <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-5xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
+                <div>
+                  <h3 className="text-2xl font-bold text-white">{selectedCompany.company.name}</h3>
+                  <p className="text-white/80 text-sm">{selectedCompany.company.domain}</p>
+                </div>
+                <button onClick={() => setShowCompanyModal(false)} className="text-white hover:text-gray-200 text-2xl">✕</button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Company Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="text-white/60 text-xs mb-1">Employees</div>
+                    <div className="text-2xl font-bold text-white">{selectedCompany.company.employeeCount}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="text-white/60 text-xs mb-1">Total Tickets</div>
+                    <div className="text-2xl font-bold text-white">{selectedCompany.company.totalTickets}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="text-white/60 text-xs mb-1">Resolved</div>
+                    <div className="text-2xl font-bold text-green-400">{selectedCompany.company.resolvedTickets}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="text-white/60 text-xs mb-1">Pending</div>
+                    <div className="text-2xl font-bold text-yellow-400">{selectedCompany.company.pendingTickets}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="text-white/60 text-xs mb-1">Avg Support Time</div>
+                    <div className="text-lg font-bold text-purple-400">{formatTime(selectedCompany.company.averageSupportTime)}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="text-white/60 text-xs mb-1">Total Support Time</div>
+                    <div className="text-lg font-bold text-orange-400">{formatTime(selectedCompany.company.totalSupportTime)}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="text-white/60 text-xs mb-1">Avg Rating</div>
+                    <div className="text-lg font-bold text-yellow-400 flex items-center gap-1">
+                      {selectedCompany.company.averageRating.toFixed(1)} ⭐
+                    </div>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="text-white/60 text-xs mb-1">Total Feedbacks</div>
+                    <div className="text-2xl font-bold text-white">{selectedCompany.company.totalFeedbacks}</div>
+                  </div>
+                </div>
+
+                {/* Employees List */}
+                <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
+                  <h4 className="text-lg font-bold text-white mb-4">Employees ({selectedCompany.employees.length})</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto">
+                    {selectedCompany.employees.map(emp => (
+                      <div key={emp._id} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#ED1B2F] to-[#455185] flex items-center justify-center text-white font-bold">
+                            {emp.name?.charAt(0)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-white font-semibold text-sm">{emp.name}</div>
+                            <div className="text-white/50 text-xs">{emp.email}</div>
+                            <div className="text-white/40 text-xs">{emp.role}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recent Tickets */}
+                <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
+                  <h4 className="text-lg font-bold text-white mb-4">Recent Tickets ({selectedCompany.tickets.length})</h4>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {selectedCompany.tickets.slice(0, 10).map(ticket => (
+                      <div key={ticket._id} className="bg-white/5 rounded-lg p-4 border border-white/10">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <h5 className="text-white font-semibold">{ticket.title}</h5>
+                            <p className="text-white/60 text-xs">#{ticket.ticketNumber}</p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(ticket.status)}`}>
+                            {ticket.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-white/50">
+                          <span>👤 {ticket.createdBy?.name}</span>
+                          <span>📅 {new Date(ticket.createdAt).toLocaleDateString()}</span>
+                          {ticket.department && <span>🏢 {ticket.department.name}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Detail Modal */}
+        {showAdminDetailModal && selectedAdmin && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAdminDetailModal(false)}>
+            <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
+                <h3 className="text-2xl font-bold text-white">Admin Performance Details</h3>
+                <button onClick={() => setShowAdminDetailModal(false)} className="text-white hover:text-gray-200 text-2xl">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="bg-white/5 rounded-xl p-4">
+                  <h4 className="text-xl font-bold text-white mb-4">{selectedAdmin.name}</h4>
+                  <div className="space-y-2 text-sm">
+                    <div><span className="text-white/60">Email:</span> <span className="text-white ml-2">{selectedAdmin.email}</span></div>
+                    <div><span className="text-white/60">Department:</span> <span className="text-white ml-2">{selectedAdmin.department?.name || 'N/A'}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

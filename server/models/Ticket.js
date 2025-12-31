@@ -1,23 +1,40 @@
-
 import mongoose from 'mongoose';
 
 const ticketSchema = new mongoose.Schema({
+
+  /* ===== IDENTIFIERS ===== */
   ticketNumber: {
     type: String,
     unique: true,
     required: true
   },
+
+  type: {
+    type: String,
+    enum: ['ticket', 'token'],
+    default: 'ticket'
+  },
+
+  /* ===== BASIC DETAILS ===== */
   title: {
     type: String,
     required: true
   },
+
   description: {
     type: String,
     required: true
   },
+
   category: {
     type: String
   },
+
+  reason: {
+    type: String
+  },
+
+  /* ===== ATTACHMENTS (COMMON) ===== */
   attachments: [{
     filename: String,
     url: String,
@@ -26,32 +43,53 @@ const ticketSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
-  reason: {
-    type: String
-  },
+
+  /* ===== TOKEN-SPECIFIC DOCUMENTS ===== */
+  supportingDocuments: [{
+    filename: String,
+    fileType: {
+      type: String,
+      enum: ['image', 'pdf']
+    },
+    url: String,
+    base64Data: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+
+  /* ===== USER & DEPARTMENT ===== */
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
+
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+
   department: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department'
   },
+
+  /* ===== STATUS & PRIORITY ===== */
   status: {
     type: String,
     enum: ['pending', 'assigned', 'in-progress', 'resolved', 'closed'],
     default: 'pending'
   },
+
   priority: {
     type: String,
     enum: ['low', 'medium', 'high'],
     default: 'medium'
   },
+
+  /* ===== REMARKS ===== */
   remarks: [{
     text: String,
     addedBy: {
@@ -63,12 +101,34 @@ const ticketSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+
+  /* ===== RESOLUTION DETAILS ===== */
   expectedResolutionDate: {
     type: Date
   },
+
   actualResolutionDate: {
     type: Date
   },
+
+  solvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+
+  solvedAt: {
+    type: Date
+  },
+
+  solution: {
+    type: String
+  },
+
+  timeToSolve: {
+    type: Number
+  },
+
+  /* ===== ADMIN ATTACHMENTS ===== */
   adminAttachments: [{
     filename: String,
     url: String,
@@ -81,23 +141,8 @@ const ticketSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
-  solvedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  solvedAt: {
-    type: Date
-  },
-  solution: {
-    type: String
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  timeToSolve: {
-    type: Number
-  },
+
+  /* ===== FEEDBACK ===== */
   feedback: {
     rating: {
       type: Number,
@@ -106,7 +151,14 @@ const ticketSchema = new mongoose.Schema({
     },
     comment: String,
     submittedAt: Date
+  },
+
+  /* ===== TIMESTAMPS ===== */
+  createdAt: {
+    type: Date,
+    default: Date.now
   }
+
 });
 
 export default mongoose.model('Ticket', ticketSchema);

@@ -8,240 +8,500 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import compression from 'compression';
+import { createTerminus } from '@godaddy/terminus';
+import mongoSanitize from 'express-mongo-sanitize';
+import hpp from 'hpp';
 
 // Routes
 import authRoutes from './routes/auth.js';
-import tokenRoutes from './routes/tokens.js';
 import userRoutes from './routes/users.js';
 import departmentRoutes from './routes/departments.js';
 import dashboardRoutes from './routes/dashboard.js';
 import categoriesRouter from './routes/categories.js';
-import adminProfilesRouter from './routes/adminProfiles.js';
+import adminProfileRoutes from './routes/adminProfiles.js';
+import companyRoutes from './routes/companies.js';
+import ticketRoutes from './routes/tickets.js';
 
 dotenv.config();
 
-// Validate required environment variables
-const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI'];
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingEnvVars.length > 0) {
-  console.error(chalk.red('✗ Missing required environment variables:'), missingEnvVars.join(', '));
-  console.error(chalk.yellow('⚠ Please set these in your .env file'));
-}
-
+/* ===============================
+   App Setup
+================================ */
 const app = express();
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const isProduction = NODE_ENV === 'production';
 
-// Security middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
+// Frontend URL configuration
+const FRONTEND_URLS = process.env.CLIENT_URL 
+  ? process.env.CLIENT_URL.split(',').map(url => url.trim())
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'];
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(limiter);
+console.log(chalk.cyan('Frontend URLs allowed:'), FRONTEND_URLS);
 
-// Compression
-app.use(compression());
+/* ===============================
+   MongoDB Configuration with Auto-Reconnect
+================================ */
+const MONGO_OPTIONS = {
+  serverSelectionTimeoutMS: 15000,
+  socketTimeoutMS: 30000,
+  connectTimeoutMS: 10000,
+  maxPoolSize: 20,
+  minPoolSize: 5,
+  maxIdleTimeMS: 30000,
+  retryWrites: true,
+  w: 'majority',
+  heartbeatFrequencyMS: 5000,
+  family: 4,
+  autoIndex: !isProduction, // Auto-create indexes in dev only
+};
 
-// Enhanced CORS configuration
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
+let mongoRetryCount = 0;
+const MAX_MONGO_RETRIES = 10;
 
-// Handle preflight requests explicitly
-app.options('*', cors());
-
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(cookieParser());
-
-// Enhanced logging with morgan and chalk
-if (NODE_ENV !== 'test') {
-  morgan.token('colored-status', (req, res) => {
-    const status = res.statusCode;
-    if (status >= 500) return chalk.red(status);
-    if (status >= 400) return chalk.yellow(status);
-    if (status >= 300) return chalk.cyan(status);
-    if (status >= 200) return chalk.green(status);
-    return chalk.gray(status);
-  });
-
-  app.use(morgan((tokens, req, res) => {
-    return [
-      chalk.blue(tokens.method(req, res)),
-      chalk.white(tokens.url(req, res)),
-      tokens['colored-status'](req, res),
-      chalk.white(`${tokens.res(req, res, 'content-length') || '-'}b`),
-      chalk.gray(`${tokens['response-time'](req, res)}ms`),
-      chalk.magenta(`from ${req.ip}`)
-    ].join(' ');
-  }));
-}
-
-// MongoDB connection with enhanced logging
-const connectDB = async () => {
+const connectDB = async (retry = false) => {
   try {
-    if (!process.env.MONGODB_URI) {
-      throw new Error('MONGODB_URI is not defined in environment variables');
+    if (mongoose.connection.readyState === 1) {
+      console.log(chalk.green('✓ MongoDB already connected'));
+      return;
     }
+
+    console.log(chalk.cyan(`${retry ? 'Retrying' : 'Connecting'} to MongoDB...`));
     
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-    });
-
-    console.log(chalk.green('✓') + ' MongoDB connected successfully');
-    console.log(chalk.blue('  Host:') + ` ${conn.connection.host}`);
-    console.log(chalk.blue('  Database:') + ` ${conn.connection.name}`);
-    console.log(chalk.blue('  Port:') + ` ${conn.connection.port}`);
-
-    // MongoDB event listeners
-    mongoose.connection.on('error', (err) => {
-      console.error(chalk.red('✗ MongoDB connection error:'), err);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.log(chalk.yellow('⚠ MongoDB disconnected'));
-    });
-
-    mongoose.connection.on('reconnected', () => {
-      console.log(chalk.green('✓ MongoDB reconnected'));
-    });
-
+    const conn = await mongoose.connect(process.env.MONGODB_URI, MONGO_OPTIONS);
+    
+    mongoRetryCount = 0;
+    console.log(chalk.green('✓ MongoDB Connected Successfully'));
+    console.log(chalk.blue('DB Name:'), conn.connection.name);
+    console.log(chalk.blue('DB Host:'), conn.connection.host);
+    
+    return conn;
   } catch (error) {
-    console.error(chalk.red('✗ MongoDB connection failed:'), error.message);
-    process.exit(1);
+    mongoRetryCount++;
+    
+    if (mongoRetryCount <= MAX_MONGO_RETRIES) {
+      console.log(chalk.yellow(`⚠ MongoDB connection failed (Attempt ${mongoRetryCount}/${MAX_MONGO_RETRIES})`));
+      console.log(chalk.gray(`Error: ${error.message}`));
+      console.log(chalk.gray(`Retrying in 5 seconds...`));
+      
+      // Exponential backoff with jitter
+      const delay = Math.min(5000 * Math.pow(1.5, mongoRetryCount), 30000);
+      setTimeout(() => connectDB(true), delay);
+    } else {
+      console.error(chalk.red('✗ MongoDB Connection Failed after maximum retries'));
+      if (!isProduction) {
+        process.exit(1);
+      }
+    }
   }
 };
 
-// Routes with enhanced logging
-console.log(chalk.cyan('📝 Registering API routes...'));
+// MongoDB event listeners for better debugging
+mongoose.connection.on('connecting', () => {
+  console.log(chalk.cyan('🔄 MongoDB Connecting...'));
+});
+
+mongoose.connection.on('connected', () => {
+  console.log(chalk.green('✓ MongoDB Connected'));
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log(chalk.yellow('⚠ MongoDB Disconnected'));
+  if (mongoRetryCount < MAX_MONGO_RETRIES) {
+    setTimeout(() => connectDB(true), 5000);
+  }
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log(chalk.green('✓ MongoDB Reconnected'));
+  mongoRetryCount = 0;
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error(chalk.red('✗ MongoDB Error:'), err.message);
+});
+
+/* ===============================
+   Enhanced CORS for Vite Frontend
+================================ */
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin && !isProduction) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is allowed
+    if (FRONTEND_URLS.some(allowedOrigin => 
+      origin === allowedOrigin || 
+      (origin && origin.startsWith(allowedOrigin.replace(/\/$/, '')))
+    )) {
+      callback(null, true);
+    } else {
+      console.log(chalk.yellow(`CORS blocked: ${origin}`));
+      callback(new Error('Not allowed by CORS'), false);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
+/* ===============================
+   Security Middleware
+================================ */
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Rate limiting - more generous for development
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: isProduction ? 1000 : 5000, // Higher limit for development
+  message: {
+    success: false,
+    message: 'Too many requests from this IP, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+  keyGenerator: (req) => {
+    return req.ip;
+  }
+});
+
+app.use('/api/', limiter);
+
+// Input sanitization
+app.use(mongoSanitize());
+app.use(hpp());
+
+// Compression
+app.use(compression({
+  level: 6,
+  threshold: 1024, // Compress all responses over 1KB
+}));
+
+/* ===============================
+   Body Parsing
+================================ */
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    try {
+      JSON.parse(buf.toString());
+    } catch (e) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid JSON payload'
+      });
+    }
+  }
+}));
+
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb',
+  parameterLimit: 50,
+}));
+
+app.use(cookieParser());
+
+/* ===============================
+   Request Logging
+================================ */
+if (NODE_ENV !== 'test') {
+  morgan.token('colored-status', (req, res) => {
+    const status = res.statusCode;
+    const color = status >= 500 ? 31 // red
+      : status >= 400 ? 33 // yellow
+      : status >= 300 ? 36 // cyan
+      : 32; // green
+    
+    return `\x1b[${color}m${status}\x1b[0m`;
+  });
+  
+  morgan.token('colored-method', (req) => {
+    const method = req.method;
+    const color = method === 'GET' ? 32 // green
+      : method === 'POST' ? 33 // yellow
+      : method === 'PUT' ? 34 // blue
+      : method === 'DELETE' ? 31 // red
+      : 37; // white
+    
+    return `\x1b[${color}m${method}\x1b[0m`;
+  });
+  
+  const format = ':date[iso] :colored-method :url :colored-status :response-time ms - :res[content-length]';
+  
+  app.use(morgan(format, {
+    skip: (req) => {
+      return req.url === '/health' || 
+             req.url === '/ping' || 
+             req.url === '/favicon.ico';
+    }
+  }));
+}
+
+/* ===============================
+   Health & Status Endpoints
+================================ */
+app.get('/health', async (req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const healthCheck = {
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    database: dbState === 1 ? 'connected' : 'disconnected',
+    databaseState: dbState,
+    memory: {
+      rss: `${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`,
+      heapTotal: `${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)} MB`,
+      heapUsed: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`,
+    },
+    nodeVersion: process.version,
+    environment: NODE_ENV,
+    frontendUrls: FRONTEND_URLS,
+  };
+  
+  // If DB is not connected, return 503
+  if (dbState !== 1) {
+    healthCheck.status = 'WARNING';
+    return res.status(503).json(healthCheck);
+  }
+  
+  res.json(healthCheck);
+});
+
+app.get('/ping', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'pong',
+    timestamp: Date.now() 
+  });
+});
+
+app.get('/api/status', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API is running',
+    version: '1.0.0',
+    environment: NODE_ENV,
+    endpoints: [
+      '/api/auth',
+      '/api/tickets',
+      '/api/users',
+      '/api/departments',
+      '/api/dashboard',
+      '/api/categories',
+      '/api/admin-profiles',
+      '/api/companies'
+    ]
+  });
+});
+
+/* ===============================
+   API Routes
+================================ */
+console.log(chalk.cyan('\n📦 Loading API Routes...'));
+
+// API v1 routes
 app.use('/api/auth', authRoutes);
-app.use('/api/tokens', tokenRoutes);
+app.use('/api/tickets', ticketRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/categories', categoriesRouter);
-app.use('/api/admin-profiles', adminProfilesRouter);
-console.log(chalk.green('✓') + ' All routes registered successfully');
+app.use('/api/admin-profiles', adminProfileRoutes);
+app.use('/api/companies', companyRoutes);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    environment: NODE_ENV
-  });
-});
-
-// API info endpoint
+// Legacy API root redirect
 app.get('/api', (req, res) => {
   res.json({
-    name: 'Token System API',
-    version: '1.0.0',
-    environment: NODE_ENV,
-    endpoints: {
-      auth: '/api/auth',
-      tokens: '/api/tokens',
-      users: '/api/users',
-      departments: '/api/departments',
-      dashboard: '/api/dashboard',
-      categories: '/api/categories',
-      adminProfiles: '/api/admin-profiles'
-    },
-    documentation: 'Add your API docs URL here'
+    success: true,
+    message: 'Ticket System API',
+    version: 'v1',
+    documentation: '/api-docs', // If you add Swagger/OpenAPI
+    endpoints: [
+      '/api/auth',
+      '/api/tickets',
+      '/api/users',
+      '/api/departments',
+      '/api/dashboard',
+      '/api/categories',
+      '/api/admin-profiles',
+      '/api/companies'
+    ]
   });
 });
 
-// Enhanced 404 handler
-app.use('*', (req, res) => {
+/* ===============================
+   404 Handler
+================================ */
+app.use((req, res, next) => {
   res.status(404).json({
     success: false,
-    message: `Route ${req.originalUrl} not found`,
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
+    suggestion: 'Check /api for available endpoints'
+  });
+});
+
+/* ===============================
+   Global Error Handler
+================================ */
+app.use((err, req, res, next) => {
+  console.error(chalk.red('✗ Error:'), {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    ip: req.ip,
     timestamp: new Date().toISOString()
   });
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(chalk.red('✗ Error:'), err.stack);
-
+  
+  // Handle CORS errors
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      success: false,
+      message: 'CORS Error: Origin not allowed',
+      allowedOrigins: FRONTEND_URLS
+    });
+  }
+  
+  // Handle Mongoose errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation Error',
+      errors: Object.values(err.errors).map(e => e.message)
+    });
+  }
+  
+  // Handle MongoDB duplicate key
+  if (err.code === 11000) {
+    return res.status(409).json({
+      success: false,
+      message: 'Duplicate key error',
+      field: Object.keys(err.keyPattern)[0]
+    });
+  }
+  
+  // Default error
   res.status(err.status || 500).json({
     success: false,
-    message: NODE_ENV === 'production' ? 'Something went wrong!' : err.message,
-    ...(NODE_ENV !== 'production' && { stack: err.stack })
+    message: isProduction ? 'Internal server error' : err.message,
+    ...(!isProduction && { stack: err.stack })
   });
 });
 
-// Graceful shutdown
-const gracefulShutdown = (signal) => {
-  console.log(chalk.yellow(`\n⚠ Received ${signal}, shutting down gracefully...`));
-
-  server.close(() => {
-    console.log(chalk.green('✓ HTTP server closed'));
-
-    mongoose.connection.close(false, () => {
-      console.log(chalk.green('✓ MongoDB connection closed'));
+/* ===============================
+   Server Start
+================================ */
+const startServer = async () => {
+  console.log(chalk.cyan('\n🚀 Starting Ticket System Server...'));
+  console.log(chalk.blue('Environment:'), NODE_ENV);
+  console.log(chalk.blue('Port:'), PORT);
+  console.log(chalk.blue('Frontend URLs:'), FRONTEND_URLS.join(', '));
+  
+  // Connect to MongoDB first
+  await connectDB();
+  
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(chalk.green(`\n✅ Server running on:`));
+    console.log(chalk.green(`   Local: http://localhost:${PORT}`));
+    console.log(chalk.green(`   Network: http://0.0.0.0:${PORT}`));
+    console.log(chalk.green(`\n✅ API Base URL: http://localhost:${PORT}/api`));
+    console.log(chalk.green(`✅ Health Check: http://localhost:${PORT}/health`));
+    console.log(chalk.green(`✅ Frontend configured for: ${FRONTEND_URLS.join(', ')}`));
+    
+    if (NODE_ENV === 'development') {
+      console.log(chalk.yellow('\n⚠️  Running in development mode'));
+      console.log(chalk.yellow('   CORS is more permissive'));
+      console.log(chalk.yellow('   Rate limiting is relaxed'));
+    }
+  });
+  
+  // Optimize server for persistent connections
+  server.keepAliveTimeout = 120 * 1000; // 120 seconds
+  server.headersTimeout = 125 * 1000; // 125 seconds
+  server.maxConnections = 1000;
+  
+  // Handle server errors
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(chalk.red(`Port ${PORT} is already in use`));
+      process.exit(1);
+    } else {
+      console.error(chalk.red('Server error:'), error);
+    }
+  });
+  
+  // Graceful shutdown setup
+  const shutdown = async (signal) => {
+    console.log(chalk.yellow(`\n⚠️  Received ${signal}, shutting down gracefully...`));
+    
+    // Close server to new connections
+    server.close(async () => {
+      console.log(chalk.yellow('Closed all incoming connections'));
+      
+      // Close MongoDB connection
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.close(false);
+        console.log(chalk.yellow('MongoDB connection closed'));
+      }
+      
+      console.log(chalk.green('✅ Server shutdown complete'));
       process.exit(0);
     });
+    
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      console.error(chalk.red('Could not close connections in time, forcing shutdown'));
+      process.exit(1);
+    }, 10000);
+  };
+  
+  // Handle shutdown signals
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  
+  // Handle uncaught errors
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error(chalk.red('Unhandled Rejection at:'), promise, 'reason:', reason);
   });
-
-  // Force close after 10 seconds
-  setTimeout(() => {
-    console.error(chalk.red('✗ Could not close connections in time, forcefully shutting down'));
-    process.exit(1);
-  }, 10000);
+  
+  process.on('uncaughtException', (error) => {
+    console.error(chalk.red('Uncaught Exception:'), error);
+    if (isProduction) {
+      shutdown('UNCAUGHT_EXCEPTION');
+    }
+  });
+  
+  return server;
 };
 
-// Listen for termination signals
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-
-// Start server
-const server = app.listen(PORT, '0.0.0.0', async () => {
-  console.log(chalk.cyan('\n🚀 Token System Server Starting...'));
-  console.log(chalk.cyan('═'.repeat(50)));
-
-  await connectDB();
-
-  console.log(chalk.cyan('═'.repeat(50)));
-  console.log(chalk.green('✓') + ` Server is running in ${chalk.yellow(NODE_ENV)} mode`);
-  console.log(chalk.blue('📍') + ` Local:    ${chalk.underline.white(`http://localhost:${PORT}`)}`);
-  console.log(chalk.blue('🌐') + ` Network:  ${chalk.underline.white(`http://0.0.0.0:${PORT}`)}`);
-  console.log(chalk.blue('📊') + ` Health:   ${chalk.underline.white(`http://localhost:${PORT}/health`)}`);
-  console.log(chalk.blue('🔧') + ` API Info: ${chalk.underline.white(`http://localhost:${PORT}/api`)}`);
-  console.log(chalk.cyan('═'.repeat(50)));
-  console.log(chalk.gray('Press Ctrl+C to stop the server\n'));
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error(chalk.red('✗ Unhandled Promise Rejection:'), err);
-  gracefulShutdown('UNHANDLED_REJECTION');
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error(chalk.red('✗ Uncaught Exception:'), err);
-  gracefulShutdown('UNCAUGHT_EXCEPTION');
+// Start the server
+startServer().catch(error => {
+  console.error(chalk.red('Failed to start server:'), error);
+  process.exit(1);
 });
 
 export default app;

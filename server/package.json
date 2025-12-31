@@ -7,6 +7,7 @@
     "dev": "node --watch index.js"
   },
   "dependencies": {
+    "@godaddy/terminus": "^4.12.1",
     "bcryptjs": "^2.4.3",
     "chalk": "^5.6.2",
     "compression": "^1.8.1",
@@ -14,12 +15,17 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
+    "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.2.1",
+    "express-slow-down": "^3.0.1",
     "helmet": "^8.1.0",
+    "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.20.1",
     "morgan": "^1.10.1",
     "nodemailer": "^7.0.11",
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "winston": "^3.19.0",
+    "xss-clean": "^0.1.4"
   }
 }

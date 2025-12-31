@@ -68,9 +68,9 @@ const Header3D = () => {
 };
 
 const UserDashboard = () => {
-  const [tokens, setTokens] = useState([]);
+  const [tickets, settickets] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [selectedToken, setSelectedToken] = useState(null);
+  const [selectedTicket, setselectedTicket] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -78,8 +78,58 @@ const UserDashboard = () => {
     description: '',
     priority: 'medium',
     department: '',
-    category: ''
+    category: '',
+    supportingDocuments: []
   });
+
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    const validFiles = files.filter(file => {
+      const isImage = file.type.startsWith('image/');
+      const isPDF = file.type === 'application/pdf';
+      const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB limit
+      
+      if (!isValidSize) {
+        alert(`File ${file.name} exceeds 5MB limit`);
+        return false;
+      }
+      
+      if (!isImage && !isPDF) {
+        alert(`File ${file.name} must be an image or PDF`);
+        return false;
+      }
+      
+      return true;
+    });
+
+    const filePromises = validFiles.map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          resolve({
+            filename: file.name,
+            fileType: file.type.startsWith('image/') ? 'image' : 'pdf',
+            base64Data: e.target.result,
+            uploadedAt: new Date()
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    const uploadedFiles = await Promise.all(filePromises);
+    setFormData(prev => ({
+      ...prev,
+      supportingDocuments: [...prev.supportingDocuments, ...uploadedFiles]
+    }));
+  };
+
+  const removeFile = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      supportingDocuments: prev.supportingDocuments.filter((_, i) => i !== index)
+    }));
+  };
   const [feedback, setFeedback] = useState({ rating: 5, comment: '' });
   const [error, setError] = useState(null);
   const [createError, setCreateError] = useState(null);
@@ -91,12 +141,12 @@ const UserDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [tokensRes, deptsRes] = await Promise.all([
-        axios.get(`${API_URL}/tokens`),
+      const [ticketsRes, deptsRes] = await Promise.all([
+        axios.get(`${API_URL}/tickets`),
         axios.get(`${API_URL}/departments`)
       ]);
-      // Filter tokens to show only those created by the current user
-      setTokens(tokensRes.data.filter(t => t.createdBy?._id === user._id));
+      // Filter tickets to show only those created by the current user
+      settickets(ticketsRes.data.filter(t => t.createdBy?._id === user._id));
       setDepartments(deptsRes.data);
       setError(null); // Clear any previous errors
     } catch (error) {
@@ -135,8 +185,8 @@ const UserDashboard = () => {
         category: formData.category || undefined,
       };
 
-      await axios.post(`${API_URL}/tokens`, payload);
-      setFormData({ title: '', description: '', priority: 'medium', department: '', category: '' });
+      await axios.post(`${API_URL}/tickets`, payload);
+      setFormData({ title: '', description: '', priority: 'medium', department: '', category: '', supportingDocuments: [] });
       setShowCreateForm(false);
       setCreateError(null);
       fetchData();
@@ -156,7 +206,7 @@ const UserDashboard = () => {
         }
       };
 
-      await axios.post(`${API_URL}/tokens/${selectedToken._id}/feedback`, feedback, config);
+      await axios.post(`${API_URL}/tickets/${selectedTicket._id}/feedback`, feedback, config);
       setShowModal(false);
       setFeedback({ rating: 5, comment: '' });
       fetchData();
@@ -329,6 +379,40 @@ const UserDashboard = () => {
                 />
               </div>
 
+              {/* File Upload */}
+              <div>
+                <label className="block text-white/80 mb-2 font-medium">Supporting Documents (Images/PDF)</label>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#455185] file:text-white hover:file:bg-[#3a456f] focus:outline-none focus:ring-2 focus:ring-[#455185]"
+                />
+                <p className="text-white/40 text-xs mt-1">Max 5MB per file. Supported: JPG, PNG, GIF, PDF</p>
+                
+                {/* Display uploaded files */}
+                {formData.supportingDocuments.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {formData.supportingDocuments.map((doc, index) => (
+                      <div key={index} className="flex items-center justify-between bg-white/5 rounded-lg p-2 border border-white/10">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{doc.fileType === 'image' ? '🖼️' : '📄'}</span>
+                          <span className="text-white/80 text-sm truncate max-w-xs">{doc.filename}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(index)}
+                          className="text-red-400 hover:text-red-300 text-sm px-2 py-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Submit Button */}
               <button
                 type="submit"
@@ -340,20 +424,20 @@ const UserDashboard = () => {
           </div>
         )}
 
-        {/* Tokens Grid */}
+        {/* tickets Grid */}
         <div className="grid gap-6">
-          {tokens.length === 0 ? (
+          {tickets.length === 0 ? (
             <div className="text-center py-16 bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10">
               <div className="text-6xl mb-4">📭</div>
               <h3 className="text-2xl font-bold text-white/80 mb-2">No Tickets Yet</h3>
               <p className="text-white/60">Create your first support ticket to get started</p>
             </div>
           ) : (
-            tokens.map((token) => (
+            tickets.map((token) => (
               <div
                 key={token._id}
                 className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20 hover:border-[#ED1B2F]/50 hover:shadow-2xl hover:shadow-[#ED1B2F]/20 transition-all duration-300 cursor-pointer"
-                onClick={() => { setSelectedToken(token); setShowModal(true); }}
+                onClick={() => { setselectedTicket(token); setShowModal(true); }}
               >
                 <div className="flex flex-col lg:flex-row gap-4">
                   <div className="flex-1">
@@ -370,7 +454,7 @@ const UserDashboard = () => {
                         </div>
                         <div className="mb-2">
                           <span className="bg-gradient-to-r from-[#ED1B2F]/20 to-[#455185]/20 text-white px-3 py-1 rounded-lg text-sm font-mono font-bold border border-white/20">
-                            #{token.tokenNumber || token._id.slice(-8)}
+                            #{token.ticketNumber || token._id.slice(-8)}
                           </span>
                         </div>
                         <p className="text-white/70 text-sm mb-2">{token.description}</p>
@@ -403,7 +487,7 @@ const UserDashboard = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent opening modal when clicking this button
-                          setSelectedToken(token);
+                          setselectedTicket(token);
                           setShowModal(true); // Show the modal for feedback
                         }}
                         className="w-full py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-sm font-semibold transition-all"
@@ -419,7 +503,7 @@ const UserDashboard = () => {
         </div>
 
         {/* Detail Modal */}
-        {showModal && selectedToken && (
+        {showModal && selectedTicket && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
             <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
@@ -431,75 +515,109 @@ const UserDashboard = () => {
                 {/* Token Info */}
                 <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                   <div className="flex items-center gap-3 mb-4">
-                    <h4 className="text-xl font-bold text-white">{selectedToken.title}</h4>
+                    <h4 className="text-xl font-bold text-white">{selectedTicket.title}</h4>
                     <span className="bg-gradient-to-r from-[#ED1B2F]/20 to-[#455185]/20 text-white px-3 py-1 rounded-lg text-sm font-mono font-bold border border-white/20">
-                      #{selectedToken.tokenNumber || selectedToken._id.slice(-8)}
+                      #{selectedTicket.ticketNumber || selectedTicket._id.slice(-8)}
                     </span>
                   </div>
-                  <p className="text-white/80 mb-4">{selectedToken.description}</p>
+                  <p className="text-white/80 mb-4">{selectedTicket.description}</p>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-white/60">Status:</span>
-                      <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(selectedToken.status)}`}>
-                        {selectedToken.status}
+                      <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(selectedTicket.status)}`}>
+                        {selectedTicket.status}
                       </span>
                     </div>
                     <div>
                       <span className="text-white/60">Priority:</span>
-                      <span className="text-white font-semibold ml-2">{selectedToken.priority}</span>
+                      <span className="text-white font-semibold ml-2">{selectedTicket.priority}</span>
                     </div>
                     <div>
                       <span className="text-white/60">Department:</span>
-                      <span className="text-white font-semibold ml-2">{selectedToken.department?.name || 'N/A'}</span>
+                      <span className="text-white font-semibold ml-2">{selectedTicket.department?.name || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-white/60">Category:</span>
-                      <span className="text-white font-semibold ml-2">{selectedToken.category || 'N/A'}</span>
+                      <span className="text-white font-semibold ml-2">{selectedTicket.category || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-white/60">Started:</span>
-                      <span className="text-white font-semibold ml-2">{new Date(selectedToken.createdAt).toLocaleString()}</span>
+                      <span className="text-white font-semibold ml-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span>
                     </div>
-                    {selectedToken.solvedAt && (
+                    {selectedTicket.solvedAt && (
                       <div>
                         <span className="text-white/60">Resolved:</span>
-                        <span className="text-green-400 font-semibold ml-2">{new Date(selectedToken.solvedAt).toLocaleString()}</span>
+                        <span className="text-green-400 font-semibold ml-2">{new Date(selectedTicket.solvedAt).toLocaleString()}</span>
                       </div>
                     )}
                     <div>
                       <span className="text-white/60">Time to Resolve:</span>
                       <span className="text-purple-400 font-semibold ml-2">
                         {(() => {
-                          let timeInMs = selectedToken.timeToSolve;
+                          let timeInMs = selectedTicket.timeToSolve;
 
                           // Fallback: calculate from createdAt and solvedAt if timeToSolve not available
-                          if (!timeInMs && selectedToken.solvedAt && selectedToken.createdAt) {
-                            timeInMs = new Date(selectedToken.solvedAt) - new Date(selectedToken.createdAt);
+                          if (!timeInMs && selectedTicket.solvedAt && selectedTicket.createdAt) {
+                            timeInMs = new Date(selectedTicket.solvedAt) - new Date(selectedTicket.createdAt);
                           }
 
                           if (timeInMs && timeInMs > 0) {
                             return formatTime(timeInMs);
                           }
 
-                          return selectedToken.status === 'resolved' ? 'N/A' : 'Pending';
+                          return selectedTicket.status === 'resolved' ? 'N/A' : 'Pending';
                         })()}
                       </span>
                     </div>
-                    {selectedToken.assignedTo && (
+                    {selectedTicket.assignedTo && (
                       <div>
                         <span className="text-white/60">Assigned to:</span>
-                        <span className="text-white font-semibold ml-2">{selectedToken.assignedTo.name}</span>
+                        <span className="text-white font-semibold ml-2">{selectedTicket.assignedTo.name}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
+                {/* Supporting Documents */}
+                {selectedTicket.supportingDocuments && selectedTicket.supportingDocuments.length > 0 && (
+                  <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
+                    <h4 className="text-lg font-bold text-white mb-4">Supporting Documents</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {selectedTicket.supportingDocuments.map((doc, idx) => (
+                        <div key={idx} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-2xl">{doc.fileType === 'image' ? '🖼️' : '📄'}</span>
+                            <span className="text-white/80 text-sm truncate flex-1">{doc.filename}</span>
+                          </div>
+                          {doc.fileType === 'image' && doc.base64Data && (
+                            <img 
+                              src={doc.base64Data} 
+                              alt={doc.filename}
+                              className="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-80"
+                              onClick={() => window.open(doc.base64Data, '_blank')}
+                            />
+                          )}
+                          {doc.fileType === 'pdf' && doc.base64Data && (
+                            <a
+                              href={doc.base64Data}
+                              download={doc.filename}
+                              className="block w-full py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-center text-sm transition-colors"
+                            >
+                              📥 Download PDF
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Admin Notes */}
-                {selectedToken.remarks && selectedToken.remarks.length > 0 && (
+                {selectedTicket.remarks && selectedTicket.remarks.length > 0 && (
                   <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                     <h4 className="text-lg font-bold text-white mb-4">Admin Notes</h4>
                     <div className="space-y-3">
-                      {selectedToken.remarks.map((remark, idx) => (
+                      {selectedTicket.remarks.map((remark, idx) => (
                         <div key={idx} className="bg-white/5 rounded-lg p-4 border-l-4 border-[#455185]">
                           <div className="flex justify-between items-start mb-2">
                             <span className="text-white/90 font-semibold text-sm">{remark.addedBy?.name}</span>
@@ -513,7 +631,7 @@ const UserDashboard = () => {
                 )}
 
                 {/* Feedback Section - Only show if status is 'solved' or 'resolved' and no feedback given yet */}
-                {(['solved', 'resolved'].includes(selectedToken.status)) && !selectedToken.feedback && (
+                {(['solved', 'resolved'].includes(selectedTicket.status)) && !selectedTicket.feedback && (
                   <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-6 border border-green-500/30">
                     <h4 className="text-lg font-bold text-white mb-4">Rate This Solution</h4>
                     <div className="space-y-4">
@@ -552,17 +670,17 @@ const UserDashboard = () => {
                 )}
 
                 {/* Display Feedback if provided */}
-                {selectedToken.feedback && (
+                {selectedTicket.feedback && (
                   <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl p-6 border border-purple-500/30">
                     <h4 className="text-lg font-bold text-white mb-3">Your Feedback</h4>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-yellow-400 text-xl">{'⭐'.repeat(selectedToken.feedback.rating)}</span>
+                      <span className="text-yellow-400 text-xl">{'⭐'.repeat(selectedTicket.feedback.rating)}</span>
                     </div>
-                    {selectedToken.feedback.comment && (
-                      <p className="text-white/80 text-sm">{selectedToken.feedback.comment}</p>
+                    {selectedTicket.feedback.comment && (
+                      <p className="text-white/80 text-sm">{selectedTicket.feedback.comment}</p>
                     )}
                     <p className="text-white/50 text-xs mt-2">
-                      Submitted on {new Date(selectedToken.feedback.submittedAt).toLocaleString()}
+                      Submitted on {new Date(selectedTicket.feedback.submittedAt).toLocaleString()}
                     </p>
                   </div>
                 )}

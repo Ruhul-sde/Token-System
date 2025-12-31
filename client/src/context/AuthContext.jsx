@@ -28,7 +28,13 @@ axios.interceptors.request.use(
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const API_URL = import.meta.env.VITE_API_URL || 'http://0.0.0.0:5000/api';
+
+  useEffect(() => {
+    if (!import.meta.env.VITE_API_URL) {
+      console.warn('⚠️ VITE_API_URL not set, using default:', API_URL);
+    }
+  }, []);
 
   // Set axios default timeout and base URL
   axios.defaults.timeout = 10000;
@@ -44,6 +50,27 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     }
   }, []);
+
+  // Function to check authentication status, used initially and potentially on other events
+  const checkAuth = async () => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const response = await axios.get('/auth/me');
+        setUser(response.data.user);
+        setLoading(false);
+      } catch (error) {
+        console.error("Authentication check failed:", error);
+        localStorage.removeItem('token');
+        delete axios.defaults.headers.common['Authorization'];
+        setUser(null);
+        setLoading(false);
+      }
+    } else {
+      setLoading(false);
+    }
+  };
+
 
   const fetchUser = async () => {
     try {
@@ -91,6 +118,22 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     await axios.post('/auth/register', userData);
   };
+
+  useEffect(() => {
+    checkAuth();
+
+    // Keep-alive ping every 30 seconds to prevent server disconnection
+    const keepAlive = setInterval(async () => {
+      try {
+        await axios.get(`${API_URL.replace('/api', '')}/ping`);
+      } catch (error) {
+        // Silently fail - server might be restarting
+        console.debug('Keep-alive ping failed:', error.message);
+      }
+    }, 30000);
+
+    return () => clearInterval(keepAlive);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, register, API_URL }}>
