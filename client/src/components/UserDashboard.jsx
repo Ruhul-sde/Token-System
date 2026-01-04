@@ -1,693 +1,361 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { 
+  PlusIcon, 
+  XMarkIcon, 
+  PaperClipIcon, 
+  RocketLaunchIcon, 
+  ChatBubbleBottomCenterTextIcon,
+  StarIcon 
+} from '@heroicons/react/24/outline';
 
-const Header3D = () => {
-  const [webglSupported, setWebglSupported] = useState(true);
-  const [ThreeComponents, setThreeComponents] = useState(null);
+/**
+ * Modern 3D Visual Header
+ * Utilizes dynamic imports for WebGL to ensure performance
+ */
+const InteractiveHeader = () => {
+  const [ThreeStack, setThreeStack] = useState(null);
 
   useEffect(() => {
-    try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      if (!gl) {
-        setWebglSupported(false);
-        return;
+    const initThree = async () => {
+      try {
+        const fiber = await import('@react-three/fiber');
+        const drei = await import('@react-three/drei');
+        setThreeStack({ ...fiber, ...drei });
+      } catch (e) {
+        console.error("WebGL Initialization Failed", e);
       }
-
-      Promise.all([
-        import('@react-three/fiber'),
-        import('@react-three/drei')
-      ]).then(([fiber, drei]) => {
-        setThreeComponents({
-          Canvas: fiber.Canvas,
-          OrbitControls: drei.OrbitControls,
-          Sphere: drei.Sphere,
-          Box: drei.Box,
-          Float: drei.Float,
-          MeshDistortMaterial: drei.MeshDistortMaterial
-        });
-      }).catch(() => setWebglSupported(false));
-    } catch {
-      setWebglSupported(false);
-    }
+    };
+    initThree();
   }, []);
 
-  if (!webglSupported || !ThreeComponents) {
-    return (
-      <div className="mb-8 h-48 rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-gradient-to-br from-[#ED1B2F]/30 to-[#455185]/30 backdrop-blur-xl flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-5xl mb-2 animate-pulse">📝</div>
-          <h1 className="text-2xl font-bold text-white">My Tickets</h1>
-        </div>
-      </div>
-    );
-  }
+  if (!ThreeStack) return (
+    <div className="h-44 w-full rounded-3xl bg-gradient-to-r from-[#ED1B2F] to-[#455185] animate-pulse flex items-center justify-center">
+      <h1 className="text-white font-black text-3xl tracking-tighter uppercase italic">Control Center</h1>
+    </div>
+  );
 
-  const { Canvas, OrbitControls, Sphere, Box, Float, MeshDistortMaterial } = ThreeComponents;
+  const { Canvas, Float, Sphere, MeshDistortMaterial, OrbitControls } = ThreeStack;
 
   return (
-    <div className="mb-8 h-48 rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-gradient-to-br from-[#ED1B2F]/20 to-[#455185]/20 backdrop-blur-xl">
+    <div className="relative h-48 w-full rounded-3xl overflow-hidden mb-10 shadow-[0_20px_50px_rgba(237,27,47,0.2)]">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-3xl z-10 pointer-events-none" />
+      <div className="absolute top-10 left-10 z-20">
+        <h1 className="text-5xl font-black text-white italic uppercase tracking-tighter">Support Hub</h1>
+        <div className="h-1 w-20 bg-[#ED1B2F] mt-2 rounded-full" />
+      </div>
+      
       <Canvas camera={{ position: [0, 0, 5] }}>
-        <ambientLight intensity={0.6} />
-        <pointLight position={[10, 10, 10]} intensity={1.5} />
-        <Float speed={1.5} rotationIntensity={1} floatIntensity={0.5}>
-          <Sphere args={[0.8, 32, 32]} position={[-2, 0, 0]}>
-            <MeshDistortMaterial color="#ED1B2F" roughness={0.3} metalness={0.8} distort={0.4} speed={2} />
+        <ambientLight intensity={1} />
+        <pointLight position={[10, 10, 10]} />
+        <Float speed={2} rotationIntensity={2}>
+          <Sphere args={[1.4, 64, 64]} position={[-3, 0, 0]}>
+            <MeshDistortMaterial color="#ED1B2F" speed={3} distort={0.5} metalness={0.9} />
           </Sphere>
         </Float>
-        <Float speed={2} rotationIntensity={1.5} floatIntensity={0.8}>
-          <Box args={[1, 1, 1]} position={[2, 0, 0]}>
-            <MeshDistortMaterial color="#455185" roughness={0.2} metalness={0.9} distort={0.3} speed={1.5} />
-          </Box>
+        <Float speed={3} rotationIntensity={1}>
+          <Sphere args={[1, 64, 64]} position={[3, -1, 0]}>
+            <MeshDistortMaterial color="#455185" speed={4} distort={0.6} metalness={0.8} />
+          </Sphere>
         </Float>
-        <OrbitControls enableZoom={false} autoRotate autoRotateSpeed={0.5} />
+        <OrbitControls enableZoom={false} />
       </Canvas>
     </div>
   );
 };
 
+/**
+ * Redesigned Support Dashboard
+ */
 const UserDashboard = () => {
-  const [tickets, settickets] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [selectedTicket, setselectedTicket] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [formData, setFormData] = useState({
+  // State Orchestration
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [orgUnits, setOrgUnits] = useState([]);
+  const [activeTicket, setActiveTicket] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDrafting, setIsDrafting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [ticketDraft, setTicketDraft] = useState({
     title: '',
     description: '',
     priority: 'medium',
     department: '',
     category: '',
-    supportingDocuments: []
+    attachments: []
   });
 
-  const handleFileUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    const validFiles = files.filter(file => {
-      const isImage = file.type.startsWith('image/');
-      const isPDF = file.type === 'application/pdf';
-      const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB limit
-      
-      if (!isValidSize) {
-        alert(`File ${file.name} exceeds 5MB limit`);
-        return false;
-      }
-      
-      if (!isImage && !isPDF) {
-        alert(`File ${file.name} must be an image or PDF`);
-        return false;
-      }
-      
-      return true;
-    });
-
-    const filePromises = validFiles.map(file => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          resolve({
-            filename: file.name,
-            fileType: file.type.startsWith('image/') ? 'image' : 'pdf',
-            base64Data: e.target.result,
-            uploadedAt: new Date()
-          });
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    const uploadedFiles = await Promise.all(filePromises);
-    setFormData(prev => ({
-      ...prev,
-      supportingDocuments: [...prev.supportingDocuments, ...uploadedFiles]
-    }));
-  };
-
-  const removeFile = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      supportingDocuments: prev.supportingDocuments.filter((_, i) => i !== index)
-    }));
-  };
-  const [feedback, setFeedback] = useState({ rating: 5, comment: '' });
-  const [error, setError] = useState(null);
-  const [createError, setCreateError] = useState(null);
   const { API_URL, user } = useAuth();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  // Data Fetching
+  const syncDashboardData = useCallback(async () => {
     try {
-      const [ticketsRes, deptsRes] = await Promise.all([
+      const [ticketRes, deptRes] = await Promise.all([
         axios.get(`${API_URL}/tickets`),
         axios.get(`${API_URL}/departments`)
       ]);
-      // Filter tickets to show only those created by the current user
-      settickets(ticketsRes.data.filter(t => t.createdBy?._id === user._id));
-      setDepartments(deptsRes.data);
-      setError(null); // Clear any previous errors
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setError('Failed to load data. Please refresh the page.');
+      setSupportTickets(ticketRes.data.filter(t => t.createdBy?._id === user._id));
+      setOrgUnits(deptRes.data);
+    } catch (err) {
+      console.error("Sync Error", err);
     }
+  }, [API_URL, user._id]);
+
+  useEffect(() => { syncDashboardData(); }, [syncDashboardData]);
+
+  // Logic: File Handling
+  const handleAttachment = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setTicketDraft(prev => ({
+          ...prev,
+          attachments: [...prev.attachments, { name: file.name, data: reader.result, type: file.type }]
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
-  const createToken = async (e) => {
+  // Logic: Submission
+  const handleTicketSubmission = async (e) => {
     e.preventDefault();
-    setCreateError(null);
-
+    setIsSubmitting(true);
     try {
-      // Validate that department is selected
-      if (!formData.department) {
-        setCreateError('Please select a department');
-        return;
-      }
-
-      // Validate title and description
-      if (!formData.title || formData.title.trim().length < 3) {
-        setCreateError('Title must be at least 3 characters');
-        return;
-      }
-
-      if (!formData.description || formData.description.trim().length < 10) {
-        setCreateError('Description must be at least 10 characters');
-        return;
-      }
-
-      const payload = {
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        priority: formData.priority,
-        department: formData.department,
-        category: formData.category || undefined,
-      };
-
-      await axios.post(`${API_URL}/tickets`, payload);
-      setFormData({ title: '', description: '', priority: 'medium', department: '', category: '', supportingDocuments: [] });
-      setShowCreateForm(false);
-      setCreateError(null);
-      fetchData();
-    } catch (error) {
-      console.error('Error creating token:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to create token. Please try again.';
-      setCreateError(errorMessage);
+      await axios.post(`${API_URL}/tickets`, ticketDraft);
+      setIsDrafting(false);
+      setTicketDraft({ title: '', description: '', priority: 'medium', department: '', category: '', attachments: [] });
+      syncDashboardData();
+    } catch (err) {
+      alert("Submission failed. Check your inputs.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
-  const submitFeedback = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      };
-
-      await axios.post(`${API_URL}/tickets/${selectedTicket._id}/feedback`, feedback, config);
-      setShowModal(false);
-      setFeedback({ rating: 5, comment: '' });
-      fetchData();
-      alert('Thank you for your feedback!');
-    } catch (error) {
-      console.error('Error submitting feedback:', error);
-      alert(error.response?.data?.message || 'Failed to submit feedback. Please try again.');
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'resolved': return 'bg-green-500/20 text-green-400 border-green-500/50';
-      case 'in-progress': return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
-      case 'assigned': return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
-      case 'pending': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
-      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/50';
-    }
-  };
-
-  const formatTime = (milliseconds) => {
-    if (!milliseconds || milliseconds === 0) return '0m';
-    
-    const totalMinutes = Math.floor(milliseconds / (1000 * 60));
-    const totalHours = Math.floor(totalMinutes / 60);
-    const days = Math.floor(totalHours / 24);
-    const hours = totalHours % 24;
-    const minutes = totalMinutes % 60;
-
-    if (days > 0) {
-      return `${days}d ${hours}h ${minutes}m`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    } else {
-      return `${minutes}m`;
-    }
-  };
-
-  const selectedDepartment = departments.find(d => d._id === formData.department);
-  const availableCategories = selectedDepartment?.categories || [];
-
-  useEffect(() => {
-    if (error) {
-      console.error('Dashboard error:', error);
-      const timer = setTimeout(() => setError(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
-
-  useEffect(() => {
-    if (createError) {
-      const timer = setTimeout(() => setCreateError(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [createError]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900">
-      <div className="container mx-auto px-4 py-8">
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-400">
-            {error}
+    <div className="min-h-screen bg-[#0a0c14] text-slate-200 selection:bg-[#ED1B2F] selection:text-white pb-20 font-sans">
+      
+      {/* Dynamic Background Elements */}
+      <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#ED1B2F]/10 blur-[120px] rounded-full" />
+        <div className="absolute top-1/2 -right-24 w-80 h-80 bg-[#455185]/10 blur-[100px] rounded-full" />
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 pt-10">
+        
+        <InteractiveHeader />
+
+        {/* Action Bar */}
+        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-6 mb-12">
+          <div>
+            <h2 className="text-white/50 uppercase tracking-[0.3em] text-xs font-bold mb-1">Authenticated as</h2>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#ED1B2F] to-[#455185] flex items-center justify-center font-bold text-white">
+                {user?.name?.charAt(0)}
+              </div>
+              <span className="text-2xl font-semibold text-white">{user?.name}</span>
+            </div>
           </div>
-        )}
-        {/* 3D Header */}
-        <Header3D />
 
-        {/* Dashboard Header */}
-        <div className="mb-8">
-          <h2 className="text-4xl font-bold bg-gradient-to-r from-[#ED1B2F] to-[#455185] bg-clip-text text-transparent">
-            My Support Tickets
-          </h2>
-          <p className="text-white/60 mt-2">Welcome back, {user?.name}</p>
-        </div>
-
-        {/* Create Ticket Button */}
-        <div className="mb-6">
           <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className="px-6 py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#c01625] text-white rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg"
+            onClick={() => setIsDrafting(!isDrafting)}
+            className={`group relative overflow-hidden px-8 py-4 rounded-2xl font-bold transition-all duration-500 shadow-2xl ${
+              isDrafting ? 'bg-slate-800 text-white' : 'bg-[#ED1B2F] text-white hover:scale-105 active:scale-95'
+            }`}
           >
-            {showCreateForm ? '✕ Cancel' : '+ Create New Ticket'}
+            <span className="relative z-10 flex items-center gap-2">
+              {isDrafting ? <XMarkIcon className="w-5 h-5" /> : <PlusIcon className="w-5 h-5" />}
+              {isDrafting ? 'Discard Draft' : 'Launch New Ticket'}
+            </span>
+            {!isDrafting && <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />}
           </button>
         </div>
 
-        {/* Create Ticket Form */}
-        {showCreateForm && (
-          <div className="mb-8 bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20">
-            <h3 className="text-2xl font-bold text-white mb-6">Create Support Ticket</h3>
-            {createError && (
-              <div className="mb-4 bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-400">
-                {createError}
-              </div>
-            )}
-            <form onSubmit={createToken} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Title */}
-                <div>
-                  <label className="block text-white/80 mb-2 font-medium">Title *</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all"
-                    placeholder="Brief description of your issue"
-                    required
-                  />
+        {/* Create Ticket Bento Box */}
+        {isDrafting && (
+          <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="bg-slate-900/40 backdrop-blur-2xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl">
+              <form onSubmit={handleTicketSubmission} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="group">
+                    <label className="text-xs font-bold text-[#455185] uppercase ml-1 mb-2 block">Issue Title</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="What's happening?"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]/50 focus:bg-white/10 transition-all placeholder:text-slate-600"
+                      onChange={(e) => setTicketDraft({...ticketDraft, title: e.target.value})}
+                    />
+                  </div>
+                  <div className="group">
+                    <label className="text-xs font-bold text-[#455185] uppercase ml-1 mb-2 block">Deep Description</label>
+                    <textarea
+                      rows="5"
+                      required
+                      placeholder="Provide the context..."
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F]/50 focus:bg-white/10 transition-all placeholder:text-slate-600"
+                      onChange={(e) => setTicketDraft({...ticketDraft, description: e.target.value})}
+                    />
+                  </div>
                 </div>
 
-                {/* Priority */}
-                <div>
-                  <label className="block text-white/80 mb-2 font-medium">Priority *</label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all"
-                    required
-                  >
-                    <option value="low" className="text-gray-900">Low</option>
-                    <option value="medium" className="text-gray-900">Medium</option>
-                    <option value="high" className="text-gray-900">High</option>
-                  </select>
-                </div>
-
-                {/* Department */}
-                <div>
-                  <label className="block text-white/80 mb-2 font-medium">Department *</label>
-                  <select
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value, category: '' })}
-                    className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all"
-                    required
-                  >
-                    <option value="" className="text-gray-900">Select Department</option>
-                    {departments.map(dept => (
-                      <option key={dept._id} value={dept._id} className="text-gray-900">{dept.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Category */}
-                {formData.department && (
+                <div className="bg-white/5 rounded-[2rem] p-6 space-y-6 border border-white/5">
                   <div>
-                    <label className="block text-white/80 mb-2 font-medium">Category</label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#455185] focus:border-transparent transition-all disabled:opacity-50"
-                      disabled={!formData.department}
+                    <label className="text-xs font-bold text-[#ED1B2F] uppercase mb-2 block">Priority Level</label>
+                    <select 
+                      className="w-full bg-slate-800 rounded-xl px-4 py-3 outline-none border border-white/10"
+                      onChange={(e) => setTicketDraft({...ticketDraft, priority: e.target.value})}
                     >
-                      <option value="" className="text-gray-900">Select Category</option>
-                      {availableCategories.map(cat => (
-                        <option key={cat._id || cat.name} value={cat.name} className="text-gray-900">{cat.name}</option>
-                      ))}
+                      <option value="low">Standard</option>
+                      <option value="medium">Important</option>
+                      <option value="high">Urgent (ASAP)</option>
                     </select>
                   </div>
-                )}
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-white/80 mb-2 font-medium">Description *</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#455185] focus:border-transparent transition-all min-h-32"
-                  placeholder="Provide detailed information about your issue..."
-                  required
-                />
-              </div>
-
-              {/* File Upload */}
-              <div>
-                <label className="block text-white/80 mb-2 font-medium">Supporting Documents (Images/PDF)</label>
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  multiple
-                  onChange={handleFileUpload}
-                  className="w-full px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#455185] file:text-white hover:file:bg-[#3a456f] focus:outline-none focus:ring-2 focus:ring-[#455185]"
-                />
-                <p className="text-white/40 text-xs mt-1">Max 5MB per file. Supported: JPG, PNG, GIF, PDF</p>
-                
-                {/* Display uploaded files */}
-                {formData.supportingDocuments.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {formData.supportingDocuments.map((doc, index) => (
-                      <div key={index} className="flex items-center justify-between bg-white/5 rounded-lg p-2 border border-white/10">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">{doc.fileType === 'image' ? '🖼️' : '📄'}</span>
-                          <span className="text-white/80 text-sm truncate max-w-xs">{doc.filename}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeFile(index)}
-                          className="text-red-400 hover:text-red-300 text-sm px-2 py-1"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
+                  <div>
+                    <label className="text-xs font-bold text-[#455185] uppercase mb-2 block">Department</label>
+                    <select 
+                      required
+                      className="w-full bg-slate-800 rounded-xl px-4 py-3 outline-none border border-white/10"
+                      onChange={(e) => setTicketDraft({...ticketDraft, department: e.target.value})}
+                    >
+                      <option value="">Select Target</option>
+                      {orgUnits.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+                    </select>
                   </div>
-                )}
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                className="w-full py-3 bg-gradient-to-r from-[#455185] to-[#3a456f] hover:from-[#3a456f] hover:to-[#2f3859] text-white rounded-xl font-semibold transition-all transform hover:scale-105"
-              >
-                🚀 Submit Ticket
-              </button>
-            </form>
+                  <div className="pt-4 border-t border-white/10">
+                    <button 
+                      disabled={isSubmitting}
+                      className="w-full py-4 bg-gradient-to-r from-[#ED1B2F] to-[#b01423] rounded-2xl font-black text-white shadow-xl hover:shadow-[#ED1B2F]/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      {isSubmitting ? 'Transmitting...' : <><RocketLaunchIcon className="w-5 h-5"/> Deploy Ticket</>}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 
-        {/* tickets Grid */}
-        <div className="grid gap-6">
-          {tickets.length === 0 ? (
-            <div className="text-center py-16 bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10">
-              <div className="text-6xl mb-4">📭</div>
-              <h3 className="text-2xl font-bold text-white/80 mb-2">No Tickets Yet</h3>
-              <p className="text-white/60">Create your first support ticket to get started</p>
+        {/* The Grid of Reality (Tickets) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {supportTickets.length === 0 ? (
+            <div className="col-span-full py-20 text-center opacity-30">
+              <ChatBubbleBottomCenterTextIcon className="w-20 h-20 mx-auto mb-4" />
+              <p className="text-xl italic">No transmissions found in your log.</p>
             </div>
           ) : (
-            tickets.map((token) => (
-              <div
-                key={token._id}
-                className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/20 hover:border-[#ED1B2F]/50 hover:shadow-2xl hover:shadow-[#ED1B2F]/20 transition-all duration-300 cursor-pointer"
-                onClick={() => { setselectedTicket(token); setShowModal(true); }}
-              >
-                <div className="flex flex-col lg:flex-row gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-start gap-3 mb-3">
-                      <span className="w-1 h-12 bg-gradient-to-b from-[#ED1B2F] to-[#455185] rounded-full"></span>
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-start gap-3 mb-2">
-                          <h3 className="text-xl font-bold text-white group-hover:text-[#ED1B2F] transition-colors">
-                            {token.title}
-                          </h3>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(token.status)}`}>
-                            {token.status.toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="mb-2">
-                          <span className="bg-gradient-to-r from-[#ED1B2F]/20 to-[#455185]/20 text-white px-3 py-1 rounded-lg text-sm font-mono font-bold border border-white/20">
-                            #{token.ticketNumber || token._id.slice(-8)}
-                          </span>
-                        </div>
-                        <p className="text-white/70 text-sm mb-2">{token.description}</p>
-                        <div className="flex flex-wrap gap-2 text-xs text-white/50">
-                          <span>📅 {new Date(token.createdAt).toLocaleDateString()}</span>
-                          {token.department?.name && (
-                            <>
-                              <span>•</span>
-                              <span>🏢 {token.department.name}</span>
-                            </>
-                          )}
-                          {token.category && (
-                            <>
-                              <span>•</span>
-                              <span>📁 {token.category}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="lg:w-48 space-y-2">
-                    {token.assignedTo && (
-                      <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                        <p className="text-white/60 text-xs mb-1">Assigned to</p>
-                        <p className="text-white font-semibold text-sm">{token.assignedTo.name}</p>
-                      </div>
-                    )}
-                    {(['solved', 'resolved'].includes(token.status)) && !token.feedback && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent opening modal when clicking this button
-                          setselectedTicket(token);
-                          setShowModal(true); // Show the modal for feedback
-                        }}
-                        className="w-full py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-sm font-semibold transition-all"
-                      >
-                        ⭐ Rate Solution
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+            supportTickets.map((ticket) => (
+              <TicketCard 
+                key={ticket._id} 
+                ticket={ticket} 
+                onFocus={() => { setActiveTicket(ticket); setIsModalOpen(true); }} 
+              />
             ))
           )}
         </div>
+      </div>
 
-        {/* Detail Modal */}
-        {showModal && selectedTicket && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
-            <div className="bg-gradient-to-br from-gray-900 to-[#1a1f3a] rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-white/20 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-gradient-to-r from-[#ED1B2F] to-[#455185] p-6 flex justify-between items-center z-10">
-                <h3 className="text-2xl font-bold text-white">Ticket Details</h3>
-                <button onClick={() => setShowModal(false)} className="text-white hover:text-gray-200 text-2xl">✕</button>
-              </div>
+      {/* Modern Modal Overlay */}
+      {isModalOpen && activeTicket && (
+        <TicketDetailModal 
+          ticket={activeTicket} 
+          close={() => setIsModalOpen(false)} 
+          colors={{ red: '#ED1B2F', blue: '#455185' }}
+        />
+      )}
+    </div>
+  );
+};
 
-              <div className="p-6 space-y-6">
-                {/* Token Info */}
-                <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                  <div className="flex items-center gap-3 mb-4">
-                    <h4 className="text-xl font-bold text-white">{selectedTicket.title}</h4>
-                    <span className="bg-gradient-to-r from-[#ED1B2F]/20 to-[#455185]/20 text-white px-3 py-1 rounded-lg text-sm font-mono font-bold border border-white/20">
-                      #{selectedTicket.ticketNumber || selectedTicket._id.slice(-8)}
-                    </span>
-                  </div>
-                  <p className="text-white/80 mb-4">{selectedTicket.description}</p>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-white/60">Status:</span>
-                      <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(selectedTicket.status)}`}>
-                        {selectedTicket.status}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-white/60">Priority:</span>
-                      <span className="text-white font-semibold ml-2">{selectedTicket.priority}</span>
-                    </div>
-                    <div>
-                      <span className="text-white/60">Department:</span>
-                      <span className="text-white font-semibold ml-2">{selectedTicket.department?.name || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-white/60">Category:</span>
-                      <span className="text-white font-semibold ml-2">{selectedTicket.category || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-white/60">Started:</span>
-                      <span className="text-white font-semibold ml-2">{new Date(selectedTicket.createdAt).toLocaleString()}</span>
-                    </div>
-                    {selectedTicket.solvedAt && (
-                      <div>
-                        <span className="text-white/60">Resolved:</span>
-                        <span className="text-green-400 font-semibold ml-2">{new Date(selectedTicket.solvedAt).toLocaleString()}</span>
-                      </div>
-                    )}
-                    <div>
-                      <span className="text-white/60">Time to Resolve:</span>
-                      <span className="text-purple-400 font-semibold ml-2">
-                        {(() => {
-                          let timeInMs = selectedTicket.timeToSolve;
+/**
+ * Modern Ticket Card with Glassmorphism
+ */
+const TicketCard = ({ ticket, onFocus }) => {
+  const statusStyles = {
+    pending: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+    assigned: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+    'in-progress': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+    resolved: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+  };
 
-                          // Fallback: calculate from createdAt and solvedAt if timeToSolve not available
-                          if (!timeInMs && selectedTicket.solvedAt && selectedTicket.createdAt) {
-                            timeInMs = new Date(selectedTicket.solvedAt) - new Date(selectedTicket.createdAt);
-                          }
+  return (
+    <div 
+      onClick={onFocus}
+      className="group relative bg-slate-900/40 border border-white/10 rounded-[2rem] p-6 cursor-pointer hover:border-[#ED1B2F]/40 hover:bg-slate-900/60 transition-all duration-300 overflow-hidden"
+    >
+      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-100 transition-opacity">
+        <RocketLaunchIcon className="w-8 h-8 text-[#ED1B2F]" />
+      </div>
+      
+      <div className="flex items-center gap-3 mb-4">
+        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${statusStyles[ticket.status]}`}>
+          {ticket.status}
+        </span>
+        <span className="text-white/20 text-xs font-mono">#{ticket._id.slice(-6)}</span>
+      </div>
 
-                          if (timeInMs && timeInMs > 0) {
-                            return formatTime(timeInMs);
-                          }
+      <h3 className="text-xl font-bold text-white mb-2 line-clamp-1 group-hover:text-[#ED1B2F] transition-colors">
+        {ticket.title}
+      </h3>
+      <p className="text-slate-400 text-sm line-clamp-2 mb-6">
+        {ticket.description}
+      </p>
 
-                          return selectedTicket.status === 'resolved' ? 'N/A' : 'Pending';
-                        })()}
-                      </span>
-                    </div>
-                    {selectedTicket.assignedTo && (
-                      <div>
-                        <span className="text-white/60">Assigned to:</span>
-                        <span className="text-white font-semibold ml-2">{selectedTicket.assignedTo.name}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+      <div className="flex items-center justify-between pt-4 border-t border-white/5">
+        <div className="text-[10px] font-bold text-slate-500 uppercase">
+          {new Date(ticket.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </div>
+        <div className="flex items-center gap-1 text-[#455185]">
+          <span className="text-xs font-bold uppercase">{ticket.department?.name || 'Gen'}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-                {/* Supporting Documents */}
-                {selectedTicket.supportingDocuments && selectedTicket.supportingDocuments.length > 0 && (
-                  <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                    <h4 className="text-lg font-bold text-white mb-4">Supporting Documents</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {selectedTicket.supportingDocuments.map((doc, idx) => (
-                        <div key={idx} className="bg-white/5 rounded-lg p-3 border border-white/10">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-2xl">{doc.fileType === 'image' ? '🖼️' : '📄'}</span>
-                            <span className="text-white/80 text-sm truncate flex-1">{doc.filename}</span>
-                          </div>
-                          {doc.fileType === 'image' && doc.base64Data && (
-                            <img 
-                              src={doc.base64Data} 
-                              alt={doc.filename}
-                              className="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-80"
-                              onClick={() => window.open(doc.base64Data, '_blank')}
-                            />
-                          )}
-                          {doc.fileType === 'pdf' && doc.base64Data && (
-                            <a
-                              href={doc.base64Data}
-                              download={doc.filename}
-                              className="block w-full py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-center text-sm transition-colors"
-                            >
-                              📥 Download PDF
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Admin Notes */}
-                {selectedTicket.remarks && selectedTicket.remarks.length > 0 && (
-                  <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                    <h4 className="text-lg font-bold text-white mb-4">Admin Notes</h4>
-                    <div className="space-y-3">
-                      {selectedTicket.remarks.map((remark, idx) => (
-                        <div key={idx} className="bg-white/5 rounded-lg p-4 border-l-4 border-[#455185]">
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="text-white/90 font-semibold text-sm">{remark.addedBy?.name}</span>
-                            <span className="text-white/50 text-xs">{new Date(remark.addedAt).toLocaleString()}</span>
-                          </div>
-                          <p className="text-white/80 text-sm">{remark.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Feedback Section - Only show if status is 'solved' or 'resolved' and no feedback given yet */}
-                {(['solved', 'resolved'].includes(selectedTicket.status)) && !selectedTicket.feedback && (
-                  <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl p-6 border border-green-500/30">
-                    <h4 className="text-lg font-bold text-white mb-4">Rate This Solution</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-white/80 mb-2">Rating</label>
-                        <div className="flex gap-2">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <button
-                              key={star}
-                              onClick={() => setFeedback({ ...feedback, rating: star })}
-                              className={`text-3xl transition-all ${star <= feedback.rating ? 'text-yellow-400' : 'text-white/20'}`}
-                            >
-                              ⭐
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-white/80 mb-2">Comment (optional)</label>
-                        <textarea
-                          value={feedback.comment}
-                          onChange={(e) => setFeedback({ ...feedback, comment: e.target.value })}
-                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-green-500"
-                          placeholder="Share your experience..."
-                          rows="3"
-                        />
-                      </div>
-                      <button
-                        onClick={submitFeedback}
-                        className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-semibold transition-all"
-                      >
-                        Submit Feedback
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Display Feedback if provided */}
-                {selectedTicket.feedback && (
-                  <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl p-6 border border-purple-500/30">
-                    <h4 className="text-lg font-bold text-white mb-3">Your Feedback</h4>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-yellow-400 text-xl">{'⭐'.repeat(selectedTicket.feedback.rating)}</span>
-                    </div>
-                    {selectedTicket.feedback.comment && (
-                      <p className="text-white/80 text-sm">{selectedTicket.feedback.comment}</p>
-                    )}
-                    <p className="text-white/50 text-xs mt-2">
-                      Submitted on {new Date(selectedTicket.feedback.submittedAt).toLocaleString()}
-                    </p>
-                  </div>
-                )}
+/**
+ * Functional Ticket Detail Component
+ */
+const TicketDetailModal = ({ ticket, close, colors }) => {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300">
+      <div className="absolute inset-0 bg-[#0a0c14]/90 backdrop-blur-md" onClick={close} />
+      <div className="relative w-full max-w-2xl bg-slate-900 rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl">
+        <div className="h-2 bg-gradient-to-r from-[#ED1B2F] to-[#455185]" />
+        <div className="p-10 max-h-[85vh] overflow-y-auto">
+          <div className="flex justify-between items-start mb-8">
+            <div>
+              <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase mb-2">{ticket.title}</h2>
+              <div className="flex gap-2">
+                 <span className="px-3 py-1 bg-[#ED1B2F]/10 text-[#ED1B2F] rounded-lg text-xs font-bold">PRIORITY: {ticket.priority}</span>
               </div>
             </div>
+            <button onClick={close} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
+              <XMarkIcon className="w-6 h-6 text-white" />
+            </button>
           </div>
-        )}
+
+          <div className="space-y-8">
+            <div className="bg-white/5 p-6 rounded-3xl border border-white/5 text-slate-300 leading-relaxed">
+              {ticket.description}
+            </div>
+
+            {ticket.remarks?.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-[#455185] uppercase tracking-widest">Admin Response</h4>
+                {ticket.remarks.map((r, i) => (
+                  <div key={i} className="bg-[#455185]/10 border-l-2 border-[#455185] p-4 rounded-r-2xl">
+                    <p className="text-sm text-white">{r.text}</p>
+                    <span className="text-[10px] text-slate-500 mt-2 block">{new Date(r.addedAt).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

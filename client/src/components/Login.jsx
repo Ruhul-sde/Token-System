@@ -1,357 +1,229 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Float, MeshDistortMaterial } from '@react-three/drei';
+import { OrbitControls, Float, MeshDistortMaterial, Sphere } from '@react-three/drei';
+import { Mail, Lock, User, Building2, Fingerprint, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
 import logo from '../assets/logo.png';
 
-const AnimatedSphere = () => (
-  <Float speed={2} rotationIntensity={1} floatIntensity={2}>
-    <mesh scale={2}>
-      <sphereGeometry args={[1, 100, 100]} />
-      <MeshDistortMaterial color="#ED1B2F" distort={0.3} speed={2} roughness={0.2} />
-    </mesh>
-  </Float>
-);
+// Optimized 3D Background Component
+const Scene = () => {
+  return (
+    <>
+      <ambientLight intensity={0.4} />
+      <pointLight position={[10, 10, 10]} intensity={1} />
+      <Float speed={1.5} rotationIntensity={0.5} floatIntensity={0.5}>
+        <Sphere args={[1, 100, 100]} scale={2.4}>
+          <MeshDistortMaterial
+            color="#ED1B2F"
+            distort={0.4}
+            speed={1.5}
+            roughness={0.1}
+            metalness={0.8}
+          />
+        </Sphere>
+      </Float>
+    </>
+  );
+};
 
 const Login = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
-    name: '',
-    employeeCode: '',
-    companyName: ''
+    email: '', password: '', confirmPassword: '', name: '', employeeCode: '', companyName: ''
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
+  const handleInputChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     setError('');
     setSuccess('');
 
     try {
       if (isForgotPassword) {
-        // Handle forgot password
         const response = await fetch(`/api/auth/forgot-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: formData.email })
         });
-
-        const data = await response.json();
         if (response.ok) {
-          setSuccess('Password reset link sent to your email!');
-          setTimeout(() => {
-            setIsForgotPassword(false);
-            setFormData({ email: '', password: '', confirmPassword: '', name: '', employeeCode: '', companyName: '' });
-          }, 2000);
+          setSuccess('Reset link dispatched to your inbox.');
+          setTimeout(() => setIsForgotPassword(false), 3000);
         } else {
-          setError(data.message || 'Failed to send reset link');
+          setError('User not found or service unavailable.');
         }
       } else if (isLogin) {
         await login(formData.email, formData.password);
         navigate('/');
       } else {
-        // Validate passwords match
-        if (formData.password !== formData.confirmPassword) {
-          setError('Passwords do not match');
-          return;
-        }
-
-        // Validate password strength
-        if (formData.password.length < 6) {
-          setError('Password must be at least 6 characters long');
-          return;
-        }
-
-        await register({
-          email: formData.email,
-          password: formData.password,
-          name: formData.name,
-          employeeCode: formData.employeeCode,
-          companyName: formData.companyName,
-          role: 'user'
-        });
-        setIsLogin(true);
-        setFormData({ email: '', password: '', confirmPassword: '', name: '', employeeCode: '', companyName: '' });
-        setSuccess('Registration successful! Please login.');
+        if (formData.password !== formData.confirmPassword) throw new Error("Passwords don't match");
+        await register({ ...formData, role: 'user' });
+        setSuccess('Account created! Access granted.');
+        setTimeout(() => setIsLogin(true), 2000);
       }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'An error occurred');
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-gradient-to-br from-gray-900 via-[#1a1f3a] to-gray-900">
-      {/* Animated Background */}
-      <div className="absolute inset-0 opacity-20">
-        <Canvas>
-          <ambientLight intensity={0.5} />
-          <pointLight position={[10, 10, 10]} />
-          <AnimatedSphere />
-          <OrbitControls enableZoom={false} enablePan={false} />
-        </Canvas>
+    <div className="min-h-screen w-full flex flex-col md:flex-row bg-[#0f121d] overflow-hidden font-sans">
+      
+      {/* LEFT SIDE: Visual Brand Identity */}
+      <div className="hidden md:flex md:w-1/2 relative items-center justify-center bg-gradient-to-br from-[#455185] to-[#0f121d]">
+        <div className="absolute inset-0 z-0">
+          <Canvas camera={{ position: [0, 0, 5], fov: 45 }}>
+            <Scene />
+            <OrbitControls enableZoom={false} />
+          </Canvas>
+        </div>
+        <div className="relative z-10 text-center px-12">
+          <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 inline-block mb-8">
+            <img src={logo} alt="Logo" className="w-24 h-24 object-contain" />
+          </div>
+          <h2 className="text-5xl font-black text-white mb-4 tracking-tighter">
+            ELEVATING <br /> <span className="text-[#ED1B2F]">TICKETING.</span>
+          </h2>
+          <p className="text-gray-300 text-lg max-w-sm mx-auto font-light">
+            Streamlined support and incident management for modern enterprises.
+          </p>
+        </div>
+        <div className="absolute bottom-8 left-8 text-white/30 text-xs">
+          © 2026 Akshay Software Technologies Pvt. Ltd.
+        </div>
       </div>
 
-      {/* Login/Signup Card */}
-      <div className="relative z-10 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-2xl rounded-3xl p-8 w-full max-w-md shadow-2xl border border-white/30">
-        {/* Logo */}
-        <div className="flex justify-center mb-6">
-          <div className="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-xl border-2 border-[#ED1B2F]/30">
-            <img src={logo} alt="Logo" className="w-16 h-16 object-contain" />
-          </div>
-        </div>
+      {/* RIGHT SIDE: Interactive Form */}
+      <div className="flex-1 flex items-center justify-center p-6 md:p-16 bg-white">
+        <div className="w-full max-w-md">
+          <header className="mb-10">
+            <h1 className="text-3xl font-bold text-[#455185]">
+              {isForgotPassword ? 'Reset Access' : isLogin ? 'Welcome Back' : 'Join the Portal'}
+            </h1>
+            <p className="text-gray-500 mt-2">
+              {isLogin ? 'Enter your credentials to manage your tickets.' : 'Complete the form to get started.'}
+            </p>
+          </header>
 
-        {/* Title and Tagline */}
-        <h1 className="text-4xl font-bold text-white text-center mb-2 drop-shadow-lg">
-          TICKETING SYSTEM
-        </h1>
-        <p className="text-white text-center mb-6 text-sm font-medium drop-shadow">
-          {isForgotPassword ? 'Reset Your Password' : isLogin ? 'Secure Employee Portal' : 'Create New Account'}
-        </p>
+          {/* Feedback Messages */}
+          {error && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl border-l-4 border-[#ED1B2F] text-sm animate-pulse">{error}</div>}
+          {success && <div className="mb-6 p-4 bg-green-50 text-green-600 rounded-xl border-l-4 border-green-500 text-sm">{success}</div>}
 
-        {error && (
-          <div className="bg-red-500/30 border-2 border-red-400 text-white p-3 rounded-lg mb-4 text-sm font-medium shadow-lg">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="bg-green-500/30 border-2 border-green-400 text-white p-3 rounded-lg mb-4 text-sm font-medium shadow-lg">
-            {success}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {isForgotPassword ? (
-            <>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <input
-                  type="email"
-                  placeholder="Enter your email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 bg-white/20 border-2 border-white/40 rounded-lg text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all font-medium"
-                  required
-                />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {!isLogin && !isForgotPassword && (
+              <div className="grid grid-cols-1 gap-5">
+                <InputField icon={<User size={18}/>} name="name" placeholder="Full Name" value={formData.name} onChange={handleInputChange} />
+                <InputField icon={<Building2 size={18}/>} name="companyName" placeholder="Company Name" value={formData.companyName} onChange={handleInputChange} />
+                <InputField icon={<Fingerprint size={18}/>} name="employeeCode" placeholder="Employee Code" value={formData.employeeCode} onChange={handleInputChange} />
               </div>
-            </>
-          ) : (
-            <>
-              {!isLogin && (
-                <>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Full Name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 bg-white/20 border-2 border-white/40 rounded-lg text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all font-medium"
-                      required
-                    />
-                  </div>
+            )}
 
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                      </svg>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Company Name"
-                      value={formData.companyName}
-                      onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 bg-white/20 border-2 border-white/40 rounded-lg text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all font-medium"
-                      required
-                    />
-                  </div>
+            <InputField 
+              icon={<Mail size={18}/>} 
+              name="email" 
+              type="email" 
+              placeholder={isLogin ? "Email or Employee Code" : "Corporate Email"} 
+              value={formData.email} 
+              onChange={handleInputChange} 
+            />
 
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                      </svg>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Employee Code"
-                      value={formData.employeeCode}
-                      onChange={(e) => setFormData({ ...formData, employeeCode: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 bg-white/20 border-2 border-white/40 rounded-lg text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all font-medium"
-                      required
-                    />
-                  </div>
-                </>
-              )}
-
+            {!isForgotPassword && (
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <input
-                  type="email"
-                  placeholder={isLogin ? "Email or Employee Code" : "Company Email"}
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 bg-white/20 border-2 border-white/40 rounded-lg text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all font-medium"
-                  required
+                <InputField 
+                  icon={<Lock size={18}/>} 
+                  name="password" 
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="Password" 
+                  value={formData.password} 
+                  onChange={handleInputChange} 
                 />
-              </div>
-
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-10 pr-12 py-3 bg-white/20 border-2 border-white/40 rounded-lg text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all font-medium"
-                  required
-                />
-                <button
-                  type="button"
+                <button 
+                  type="button" 
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-white hover:text-white/80 transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#455185]"
                 >
-                  {showPassword ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+            )}
 
-              {!isLogin && (
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                  </div>
-                  <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Confirm Password"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className="w-full pl-10 pr-12 py-3 bg-white/20 border-2 border-white/40 rounded-lg text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent transition-all font-medium"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-white hover:text-white/80 transition-colors"
-                  >
-                    {showConfirmPassword ? (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+            {!isLogin && !isForgotPassword && (
+              <InputField icon={<Lock size={18}/>} name="confirmPassword" type="password" placeholder="Confirm Password" value={formData.confirmPassword} onChange={handleInputChange} />
+            )}
 
-          <button
-            type="submit"
-            className="w-full py-3 bg-gradient-to-r from-[#ED1B2F] to-[#d41829] hover:from-[#d41829] hover:to-[#b91525] text-white rounded-lg font-bold text-lg transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:scale-[1.02]"
-          >
-            {isForgotPassword ? 'Send Reset Link' : isLogin ? 'Login' : 'Register'}
-          </button>
-        </form>
+            {isLogin && !isForgotPassword && (
+              <div className="flex justify-end">
+                <button 
+                  type="button"
+                  onClick={() => setIsForgotPassword(true)}
+                  className="text-sm font-semibold text-[#455185] hover:text-[#ED1B2F] transition-colors"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+            )}
 
-        {isLogin && !isForgotPassword && (
-          <div className="mt-4 text-center">
             <button
-              onClick={() => {
-                setIsForgotPassword(true);
-                setError('');
-                setSuccess('');
-                setFormData({ email: '', password: '', confirmPassword: '', name: '', employeeCode: '', companyName: '' });
-              }}
-              className="text-white hover:text-white/90 text-sm font-semibold underline decoration-2"
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 bg-[#455185] hover:bg-[#343d64] text-white py-4 rounded-xl font-bold text-lg transition-all shadow-lg shadow-blue-900/10 active:scale-95 disabled:opacity-70"
             >
-              Forgot Password?
+              {loading ? <Loader2 className="animate-spin" /> : (
+                <>
+                  {isForgotPassword ? 'Send Reset Link' : isLogin ? 'Sign In' : 'Create Account'}
+                  <ArrowRight size={20} />
+                </>
+              )}
             </button>
-          </div>
-        )}
+          </form>
 
-        <div className="mt-6 text-center">
-          {isForgotPassword ? (
-            <p className="text-white text-sm font-medium">
-              Remember your password?{' '}
-              <button
-                onClick={() => {
-                  setIsForgotPassword(false);
-                  setError('');
-                  setSuccess('');
-                  setFormData({ email: '', password: '', confirmPassword: '', name: '', employeeCode: '', companyName: '' });
-                }}
-                className="text-[#FF6B6B] hover:text-[#FF5252] font-bold underline decoration-2 ml-1"
-              >
-                Login here
-              </button>
-            </p>
-          ) : (
-            <p className="text-white text-sm font-medium">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
+          <footer className="mt-8 text-center">
+            <p className="text-gray-500">
+              {isForgotPassword ? "Remembered it?" : isLogin ? "New to the system?" : "Already a member?"}
               <button
                 onClick={() => {
                   setIsLogin(!isLogin);
+                  setIsForgotPassword(false);
                   setError('');
-                  setSuccess('');
-                  setFormData({ email: '', password: '', confirmPassword: '', name: '', employeeCode: '', companyName: '' });
                 }}
-                className="text-[#FF6B6B] hover:text-[#FF5252] font-bold underline decoration-2 ml-1"
+                className="ml-2 text-[#ED1B2F] font-bold hover:underline"
               >
-                {isLogin ? 'Register here' : 'Login here'}
+                {isForgotPassword ? 'Back to Login' : isLogin ? 'Create Account' : 'Sign In'}
               </button>
             </p>
-          )}
-        </div>
-
-        <div className="mt-6 text-center text-white/90 text-xs font-medium drop-shadow">
-          © 2025 Akshay Software Technologies Private Limited. All rights reserved.
+          </footer>
         </div>
       </div>
     </div>
   );
 };
+
+// Reusable Input Sub-component for clean code
+const InputField = ({ icon, ...props }) => (
+  <div className="group relative">
+    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-[#ED1B2F] transition-colors">
+      {icon}
+    </div>
+    <input
+      {...props}
+      required
+      className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-xl text-[#455185] placeholder-gray-400 focus:bg-white focus:border-[#455185] focus:ring-4 focus:ring-[#455185]/5 outline-none transition-all"
+    />
+  </div>
+);
 
 export default Login;
