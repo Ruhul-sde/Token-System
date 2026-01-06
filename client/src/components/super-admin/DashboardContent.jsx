@@ -8,6 +8,7 @@ import CompaniesTab from './tabs/CompaniesTab';
 import DepartmentsTab from './tabs/DepartmentsTab';
 import AdminsTab from './tabs/AdminsTab';
 import UsersTab from './tabs/UsersTab';
+import SolutionsDirectoryTab from './tabs/SolutionsDirectoryTab'; // Add this import
 
 const DashboardContent = () => {
   const { activeTab } = useSuperAdmin();
@@ -26,6 +27,8 @@ const DashboardContent = () => {
         return <AdminsTab />;
       case 'users':
         return <UsersTab />;
+      case 'solutions': // Add this case
+        return <SolutionsDirectoryTab />;
       default:
         return <OverviewTab />;
     }

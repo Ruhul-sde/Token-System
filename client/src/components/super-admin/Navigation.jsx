@@ -8,6 +8,7 @@ const Navigation = () => {
   const tabs = [
     { id: 'overview', icon: '⚡', label: 'Overview' },
     { id: 'tickets', icon: '🎫', label: 'Tickets' },
+    { id: 'solutions', icon: '💡', label: 'Solutions Directory' }, // Add this line
     { id: 'users', icon: '👥', label: 'Users' },
     { id: 'departments', icon: '🏢', label: 'Departments' },
     { id: 'admins', icon: '🛡️', label: 'Admins' },

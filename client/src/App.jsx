@@ -3,13 +3,14 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import UserDashboardPage from './pages/UserDashboardPage'; // Updated import
-import AdminDashboard from './components/AdminDashboard';
 import SuperAdminDashboardPage from './pages/SuperAdminDashboardPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import UserDashboardPage from './pages/UserDashboardPage';
 import Navbar from './components/Navbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SuperAdminDashboardProvider } from './context/SuperAdminContext';
-import { UserDashboardProvider } from './context/UserDashboardContext'; // Add this import
+import { UserDashboardProvider } from './context/UserDashboardContext';
+import { AdminProvider } from './context/AdminContext'; // Add this import
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -52,6 +53,13 @@ const UserWrapper = () => (
   <UserDashboardProvider>
     <UserDashboardPage />
   </UserDashboardProvider>
+);
+
+// Admin wrapper component
+const AdminWrapper = () => (
+  <AdminProvider> {/* Wrap with AdminProvider */}
+    <AdminDashboardPage />
+  </AdminProvider>
 );
 
 const AppRoutes = () => {
@@ -99,7 +107,7 @@ const AppRoutes = () => {
         path="/user"
         element={
           <ProtectedRoute allowedRoles={['user']}>
-            <UserWrapper /> {/* Use the wrapper */}
+            <UserWrapper />
           </ProtectedRoute>
         }
       />
@@ -107,8 +115,8 @@ const AppRoutes = () => {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
+          <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
+            <AdminWrapper /> {/* Use AdminWrapper instead of AdminDashboardPage directly */}
           </ProtectedRoute>
         }
       />
