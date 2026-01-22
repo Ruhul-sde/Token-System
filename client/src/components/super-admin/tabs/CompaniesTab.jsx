@@ -672,7 +672,7 @@ const CompaniesTab = () => {
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            className="w-full bg-[#1E293B] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
@@ -684,7 +684,7 @@ const CompaniesTab = () => {
           <select
             value={selectedERP}
             onChange={(e) => setSelectedERP(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            className="w-full bg-[#1E293B] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
           >
             <option value="all">All ERP Systems</option>
             {erpOptions.map(erp => (
@@ -1342,7 +1342,7 @@ const CompaniesTab = () => {
                   name="erpDetails.erpName"
                   value={formData.erpDetails.erpName}
                   onChange={handleInputChange}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                  className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
                 >
                   <option value="">Select ERP System</option>
                   {erpOptions.map(erp => (
@@ -1362,7 +1362,7 @@ const CompaniesTab = () => {
                         name="erpDetails.sapB1VersionType"
                         value={formData.erpDetails.sapB1VersionType}
                         onChange={handleInputChange}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                        className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
                       >
                         <option value="">Select Version Type</option>
                         {sapVersionOptions.map(version => (
@@ -1394,7 +1394,7 @@ const CompaniesTab = () => {
                         name="erpDetails.sapLicenseAMC"
                         value={formData.erpDetails.sapLicenseAMC}
                         onChange={handleInputChange}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                        className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
                       >
                         <option value="">Select License Status</option>
                         {licenseAMCOptions.map(status => (
@@ -1410,7 +1410,7 @@ const CompaniesTab = () => {
                         name="erpDetails.sapSupportAMCType"
                         value={formData.erpDetails.sapSupportAMCType}
                         onChange={handleInputChange}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                        className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
                       >
                         <option value="">Select Support Type</option>
                         {supportAMCTypeOptions.map(type => (
@@ -1428,7 +1428,7 @@ const CompaniesTab = () => {
                       name="erpDetails.sapSupportAMCStatus"
                       value={formData.erpDetails.sapSupportAMC?.status || ''}
                       onChange={handleInputChange}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                      className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
                     >
                       <option value="">Select Support Status</option>
                       {supportAMCOptions.map(status => (
@@ -1581,15 +1581,167 @@ const CompaniesTab = () => {
             </div>
           </div>
 
-          {/* ERP Details Section */}
+          {/* ERP Details Section - Same structure as create modal */}
           <div className="border-t border-white/10 pt-4">
             <h4 className="font-bold text-white mb-3 flex items-center gap-2">
               <FaDatabase className="text-purple-400" />
               ERP System Details
             </h4>
             
-            {/* ... (Same ERP form fields as create modal) ... */}
-            {/* Note: For brevity, including the same ERP form structure as create modal */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-2">
+                  ERP Name
+                </label>
+                <select
+                  name="erpDetails.erpName"
+                  value={formData.erpDetails.erpName}
+                  onChange={handleInputChange}
+                  className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                >
+                  <option value="">Select ERP System</option>
+                  {erpOptions.map(erp => (
+                    <option key={erp} value={erp}>{erp}</option>
+                  ))}
+                </select>
+              </div>
+
+              {formData.erpDetails.erpName === 'SAP B1' && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-white/70 mb-2">
+                        SAP B1 Version Type
+                      </label>
+                      <select
+                        name="erpDetails.sapB1VersionType"
+                        value={formData.erpDetails.sapB1VersionType}
+                        onChange={handleInputChange}
+                        className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                      >
+                        <option value="">Select Version Type</option>
+                        {sapVersionOptions.map(version => (
+                          <option key={version} value={version}>{version}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white/70 mb-2">
+                        SAP Version and FP
+                      </label>
+                      <input
+                        type="text"
+                        name="erpDetails.sapB1VersionAndFP"
+                        value={formData.erpDetails.sapB1VersionAndFP}
+                        onChange={handleInputChange}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                        placeholder="e.g., 10 FP 2502"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-white/70 mb-2">
+                        SAP License AMC
+                      </label>
+                      <select
+                        name="erpDetails.sapLicenseAMC"
+                        value={formData.erpDetails.sapLicenseAMC}
+                        onChange={handleInputChange}
+                        className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                      >
+                        <option value="">Select License Status</option>
+                        {licenseAMCOptions.map(status => (
+                          <option key={status} value={status}>{status}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white/70 mb-2">
+                        SAP Support AMC Type
+                      </label>
+                      <select
+                        name="erpDetails.sapSupportAMCType"
+                        value={formData.erpDetails.sapSupportAMCType}
+                        onChange={handleInputChange}
+                        className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                      >
+                        <option value="">Select Support Type</option>
+                        {supportAMCTypeOptions.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-2">
+                      SAP Support AMC Status
+                    </label>
+                    <select
+                      name="erpDetails.sapSupportAMCStatus"
+                      value={formData.erpDetails.sapSupportAMC?.status || ''}
+                      onChange={handleInputChange}
+                      className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                    >
+                      <option value="">Select Support Status</option>
+                      {supportAMCOptions.map(status => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {formData.erpDetails.sapSupportAMC?.status === 'Active' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-white/70 mb-2">
+                          From Date *
+                        </label>
+                        <input
+                          type="date"
+                          name="erpDetails.sapSupportAMCFromDate"
+                          value={formData.erpDetails.sapSupportAMC?.fromDate || ''}
+                          onChange={handleInputChange}
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-white/70 mb-2">
+                          To Date *
+                        </label>
+                        <input
+                          type="date"
+                          name="erpDetails.sapSupportAMCToDate"
+                          value={formData.erpDetails.sapSupportAMC?.toDate || ''}
+                          onChange={handleInputChange}
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-2">
+                  ERP Incident Types
+                </label>
+                <div className="space-y-2">
+                  {incidentTypeOptions.map(type => (
+                    <label key={type} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.erpDetails.erpIncidentTypes.includes(type)}
+                        onChange={() => handleIncidentTypeChange(type)}
+                        className="rounded bg-white/5 border-white/10 text-[#ED1B2F] focus:ring-[#ED1B2F]"
+                      />
+                      <span className="text-white/90">{type}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

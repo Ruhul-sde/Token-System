@@ -91,7 +91,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/auth/login', { email, password });
       localStorage.setItem('token', response.data.token);
-      // The interceptor will now handle setting the Authorization header for subsequent requests
+      // Explicitly set the header for the next requests
+      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
       setUser(response.data.user);
       return response.data;
     } catch (error) {

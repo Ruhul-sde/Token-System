@@ -1,4 +1,3 @@
-// components/super-admin/tabs/UsersTab.jsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import Card from '../../ui/Card';
@@ -6,21 +5,25 @@ import Button from '../../ui/Button';
 import Badge from '../../ui/Badge';
 import Modal from '../../ui/Modal';
 import axios from 'axios';
-import { getStatusColor } from '../../../constants/theme';
 import {
   FaUsers,
   FaSearch,
   FaPlus,
   FaEdit,
   FaTrash,
-  FaEnvelope,
   FaPhone,
   FaBuilding,
   FaIdCard,
-  FaKey,
-  FaCalendarAlt,
+  FaUserCheck,
+  FaUserSlash,
   FaSync,
-  FaExclamationCircle
+  FaEnvelope,
+  FaCalendarAlt,
+  FaExclamationCircle,
+  FaKey,
+  FaBriefcase,
+  FaChartBar,
+  FaFileExport
 } from 'react-icons/fa';
 
 const UsersTab = () => {
@@ -32,7 +35,8 @@ const UsersTab = () => {
     totalUsers: 0,
     activeUsers: 0,
     suspendedUsers: 0,
-    frozenUsers: 0
+    frozenUsers: 0,
+    withCompany: 0
   });
 
   // Filters
@@ -54,15 +58,19 @@ const UsersTab = () => {
     confirmPassword: '',
     employeeCode: '',
     companyId: '',
+    companyName: '',
     phoneNumber: '',
-    role: 'user' // Explicitly set role to 'user'
+    position: ''
   });
 
   // Error state
   const [error, setError] = useState(null);
 
-  // Fetch users data (only regular users, no superadmins)
-  const fetchUsersData = async () => {
+  // Safely access companies array
+  const safeCompanies = Array.isArray(companies) ? companies : [];
+
+  // Fetch users and companies
+  const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -71,59 +79,70 @@ const UsersTab = () => {
         headers: { 'Authorization': `Bearer ${token}` } 
       };
 
-      // Fetch users with filters - only regular users
-      const params = {
-        search: searchTerm || undefined,
-        companyId: filterCompany !== 'all' ? filterCompany : undefined,
-        status: filterStatus !== 'all' ? filterStatus : undefined,
-        role: 'user' // Only fetch regular users, not superadmins
-      };
+      // Fetch users with role='user'
+      const usersResponse = await axios.get(`${API_URL}/users/role/user`, config);
+      const usersData = usersResponse.data.users || [];
+      
+      setUsers(usersData);
+      
+      // Update stats from API response
+      if (usersResponse.data.stats) {
+        setStats({
+          totalUsers: usersResponse.data.stats.total || 0,
+          activeUsers: usersResponse.data.stats.active || 0,
+          suspendedUsers: usersResponse.data.stats.suspended || 0,
+          frozenUsers: usersResponse.data.stats.frozen || 0,
+          withCompany: usersResponse.data.stats.withCompany || 0
+        });
+      }
 
-      const response = await axios.get(`${API_URL}/users`, {
-        ...config,
-        params
-      });
-
-      if (response.data.success) {
-        const { users: usersData = [], stats: statsData = {}, companies: companiesData = [] } = response.data;
-        
-        // Double filter: by API param and client-side
-        const regularUsers = usersData.filter(user => user.role === 'user');
-        
-        console.log('Fetched regular users:', regularUsers.length, regularUsers.map(u => ({ 
-          name: u.name, 
-          role: u.role,
-          email: u.email 
-        })));
-        
-        setUsers(regularUsers);
-        setStats(statsData);
-        setCompanies(companiesData);
-      } else {
-        throw new Error(response.data.message || 'Failed to fetch users');
+      // Fetch companies
+      try {
+        const companiesResponse = await axios.get(`${API_URL}/companies`, config);
+        const companiesData = companiesResponse.data.companies || 
+                              companiesResponse.data || 
+                              [];
+        setCompanies(Array.isArray(companiesData) ? companiesData : []);
+      } catch (companyError) {
+        console.warn('Could not fetch companies:', companyError);
+        setCompanies([]);
       }
 
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('Error fetching user data:', error);
       setError(error.response?.data?.message || error.message);
+      setUsers([]);
+      setCompanies([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Initialize data
   useEffect(() => {
-    fetchUsersData();
+    fetchData();
   }, []);
 
-  // Refetch when filters change
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      fetchUsersData();
-    }, 300);
+  // Filter users function
+  const filterUsers = () => {
+    return Array.isArray(users) ? users.filter(user => {
+      const matchesSearch = searchTerm === '' || 
+        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.employeeCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.companyName?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesCompany = filterCompany === 'all' || 
+        (user.company && user.company._id === filterCompany) ||
+        (user.companyId === filterCompany);
+      
+      const matchesStatus = filterStatus === 'all' || 
+        user.status === filterStatus;
+      
+      return matchesSearch && matchesCompany && matchesStatus;
+    }) : [];
+  };
 
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm, filterCompany, filterStatus]);
+  const filteredUsers = filterUsers();
 
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -143,8 +162,9 @@ const UsersTab = () => {
       confirmPassword: '',
       employeeCode: '',
       companyId: '',
+      companyName: '',
       phoneNumber: '',
-      role: 'user' // Explicitly set for new users
+      position: ''
     });
     setShowCreateModal(true);
   };
@@ -158,9 +178,10 @@ const UsersTab = () => {
       password: '',
       confirmPassword: '',
       employeeCode: user.employeeCode || '',
-      companyId: user.company?._id || '',
+      companyId: user.company?._id || user.companyId || '',
+      companyName: user.companyName || '',
       phoneNumber: user.phoneNumber || '',
-      role: 'user' // Ensure role remains 'user'
+      position: user.position || ''
     });
     setShowEditModal(true);
   };
@@ -171,7 +192,7 @@ const UsersTab = () => {
     setShowDeleteModal(true);
   };
 
-  // Create user (always as regular user)
+  // Create user
   const handleCreateUser = async () => {
     try {
       // Validate form
@@ -198,34 +219,24 @@ const UsersTab = () => {
         } 
       };
 
-      // Log data for debugging
-      console.log('Creating user with data:', {
-        ...formData,
-        role: 'user'
-      });
-
+      // Create user with user role (default)
       const userData = {
         name: formData.name,
         email: formData.email,
         password: formData.password,
-        role: 'user', // Explicitly set role to 'user'
+        role: 'user', // Regular user
         employeeCode: formData.employeeCode || undefined,
         companyId: formData.companyId || undefined,
-        phoneNumber: formData.phoneNumber || undefined
+        companyName: formData.companyName || undefined,
+        phoneNumber: formData.phoneNumber || undefined,
+        position: formData.position || undefined
       };
 
       const response = await axios.post(`${API_URL}/users`, userData, config);
       
-      console.log('Create user response:', response.data);
-      
       if (response.data.success) {
-        // Verify the created user has correct role
-        if (response.data.user && response.data.user.role !== 'user') {
-          console.warn('Warning: Created user has role', response.data.user.role, 'but expected: user');
-        }
-        
         setShowCreateModal(false);
-        await fetchUsersData();
+        await fetchData();
         alert('User created successfully!');
       } else {
         throw new Error(response.data.message || 'Failed to create user');
@@ -233,12 +244,11 @@ const UsersTab = () => {
 
     } catch (error) {
       console.error('Error creating user:', error);
-      console.error('Error details:', error.response?.data);
       alert(`Failed to create user: ${error.response?.data?.message || error.message}`);
     }
   };
 
-  // Update user (can't change role to superadmin)
+  // Update user
   const handleUpdateUser = async () => {
     try {
       if (!selectedUser) return;
@@ -255,8 +265,10 @@ const UsersTab = () => {
         name: formData.name,
         employeeCode: formData.employeeCode || null,
         companyId: formData.companyId || null,
+        companyName: formData.companyName || null,
         phoneNumber: formData.phoneNumber || null,
-        role: 'user' // Ensure role remains 'user' during updates
+        position: formData.position || null,
+        role: 'user' // Ensure role stays as user
       };
 
       // Only include password if provided
@@ -272,15 +284,15 @@ const UsersTab = () => {
         userData.password = formData.password;
       }
 
-      console.log('Updating user with data:', userData);
-
-      const response = await axios.put(`${API_URL}/users/${selectedUser._id}`, userData, config);
-      
-      console.log('Update user response:', response.data);
+      const response = await axios.put(
+        `${API_URL}/users/${selectedUser._id}`, 
+        userData, 
+        config
+      );
       
       if (response.data.success) {
         setShowEditModal(false);
-        await fetchUsersData();
+        await fetchData();
         alert('User updated successfully!');
       } else {
         throw new Error(response.data.message || 'Failed to update user');
@@ -306,7 +318,7 @@ const UsersTab = () => {
       
       if (response.data.success) {
         setShowDeleteModal(false);
-        await fetchUsersData();
+        await fetchData();
         alert('User deleted successfully!');
       } else {
         throw new Error(response.data.message || 'Failed to delete user');
@@ -319,12 +331,11 @@ const UsersTab = () => {
   };
 
   // Update user status
-  const updateUserStatus = async (userId, status, reason = '') => {
+  const updateUserStatus = async (userId, currentStatus) => {
     try {
-      if (!reason || reason.trim() === '') {
-        reason = prompt(`Reason for ${status} status:`);
-        if (reason === null) return;
-      }
+      const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+      const reason = prompt(`Reason for ${newStatus} status:`);
+      if (reason === null) return;
 
       const token = localStorage.getItem('token');
       const config = { 
@@ -333,13 +344,13 @@ const UsersTab = () => {
 
       const response = await axios.patch(
         `${API_URL}/users/${userId}/status`, 
-        { status, statusReason: reason }, 
+        { status: newStatus, statusReason: reason }, 
         config
       );
       
       if (response.data.success) {
-        await fetchUsersData();
-        alert(`User status updated to ${status}`);
+        await fetchData();
+        alert(`User status updated to ${newStatus}`);
       } else {
         throw new Error(response.data.message || 'Failed to update status');
       }
@@ -382,27 +393,57 @@ const UsersTab = () => {
     }
   };
 
-  // Filter users based on criteria
-  const filteredUsers = Array.isArray(users) ? users.filter(user => {
-    const matchesSearch = searchTerm === '' || 
-      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.employeeCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.companyName?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesCompany = filterCompany === 'all' || 
-      (user.company && user.company._id === filterCompany);
-    const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
-    
-    return matchesSearch && matchesCompany && matchesStatus;
-  }) : [];
+  // Get company name by ID
+  const getCompanyName = (user) => {
+    if (user.company && user.company.name) {
+      return user.company.name;
+    }
+    if (user.companyName) {
+      return user.companyName;
+    }
+    if (user.companyId) {
+      const company = safeCompanies.find(c => c._id === user.companyId);
+      return company ? company.name : 'Unknown Company';
+    }
+    return 'No company';
+  };
+
+  // Export users to CSV
+  const exportUsers = () => {
+    const csvData = filteredUsers.map(user => ({
+      Name: user.name,
+      Email: user.email,
+      'Employee Code': user.employeeCode || '',
+      Company: getCompanyName(user),
+      Position: user.position || '',
+      Status: user.status,
+      'Phone Number': user.phoneNumber || '',
+      'Created Date': user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '',
+      'Last Login': user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : ''
+    }));
+
+    const csv = [
+      Object.keys(csvData[0] || {}).join(','),
+      ...csvData.map(row => Object.values(row).map(value => `"${value}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `users_export_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
 
   if (loading && users.length === 0) {
     return (
       <Card className="overflow-hidden">
         <div className="flex flex-col items-center justify-center h-96">
           <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#ED1B2F] mb-6"></div>
-          <p className="text-white text-lg mb-2">Loading users data...</p>
+          <p className="text-white text-lg mb-2">Loading user data...</p>
         </div>
       </Card>
     );
@@ -415,7 +456,7 @@ const UsersTab = () => {
           <FaExclamationCircle className="text-red-400 text-6xl mb-6" />
           <p className="text-white text-lg mb-2">Error loading users</p>
           <p className="text-white/60 mb-4">{error}</p>
-          <Button variant="primary" onClick={fetchUsersData}>
+          <Button variant="primary" onClick={fetchData}>
             <FaSync className="mr-2" />
             Retry
           </Button>
@@ -434,7 +475,7 @@ const UsersTab = () => {
             User Management
           </h3>
           <p className="text-sm text-white/60 mt-1">
-            {filteredUsers.length} of {stats.totalUsers || 0} users • {stats.activeUsers || 0} active
+            {filteredUsers.length} of {stats.totalUsers} users • {stats.activeUsers} active
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -448,7 +489,16 @@ const UsersTab = () => {
           </Button>
           <Button 
             variant="secondary" 
-            onClick={fetchUsersData}
+            onClick={exportUsers}
+            className="flex items-center gap-2"
+            disabled={filteredUsers.length === 0}
+          >
+            <FaFileExport />
+            Export CSV
+          </Button>
+          <Button 
+            variant="secondary" 
+            onClick={fetchData}
             className="flex items-center gap-2"
             disabled={loading}
           >
@@ -459,12 +509,12 @@ const UsersTab = () => {
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="md:col-span-2">
           <div className="relative">
             <input
               type="text"
-              placeholder="Search users by name, email, or employee code..."
+              placeholder="Search users by name, email, employee ID, or company..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pl-10 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
@@ -473,29 +523,43 @@ const UsersTab = () => {
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
+        <div>
           <select
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
             value={filterCompany}
             onChange={(e) => setFilterCompany(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            style={{
+              color: '#ffffff',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)'
+            }}
           >
-            <option value="all">All Companies</option>
-            {Array.isArray(companies) && companies.map(company => (
-              <option key={company.id || company._id} value={company.id || company._id}>
+            <option value="all" className="bg-gray-800 text-white">All Companies</option>
+            {safeCompanies.map(company => (
+              <option 
+                key={company._id} 
+                value={company._id}
+                className="bg-gray-800 text-white"
+              >
                 {company.name}
               </option>
             ))}
           </select>
-          
+        </div>
+        
+        <div>
           <select
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            style={{
+              color: '#ffffff',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)'
+            }}
           >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="suspended">Suspended</option>
-            <option value="frozen">Frozen</option>
+            <option value="all" className="bg-gray-800 text-white">All Status</option>
+            <option value="active" className="bg-gray-800 text-white">Active</option>
+            <option value="suspended" className="bg-gray-800 text-white">Suspended</option>
+            <option value="frozen" className="bg-gray-800 text-white">Frozen</option>
           </select>
         </div>
       </div>
@@ -503,23 +567,51 @@ const UsersTab = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
-          <div className="text-2xl font-bold text-white">{stats.totalUsers || 0}</div>
-          <div className="text-sm text-white/60">Total Users</div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/20">
+              <FaUsers className="text-blue-400" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-white">{stats.totalUsers}</div>
+              <div className="text-sm text-white/60">Total Users</div>
+            </div>
+          </div>
         </div>
         
         <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
-          <div className="text-2xl font-bold text-emerald-400">{stats.activeUsers || 0}</div>
-          <div className="text-sm text-white/60">Active</div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-500/20">
+              <FaUserCheck className="text-emerald-400" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-emerald-400">{stats.activeUsers}</div>
+              <div className="text-sm text-white/60">Active</div>
+            </div>
+          </div>
         </div>
         
         <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
-          <div className="text-2xl font-bold text-yellow-400">{stats.suspendedUsers || 0}</div>
-          <div className="text-sm text-white/60">Suspended</div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-yellow-500/20">
+              <FaUserSlash className="text-yellow-400" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-yellow-400">{stats.suspendedUsers}</div>
+              <div className="text-sm text-white/60">Suspended</div>
+            </div>
+          </div>
         </div>
         
         <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
-          <div className="text-2xl font-bold text-red-400">{stats.frozenUsers || 0}</div>
-          <div className="text-sm text-white/60">Frozen</div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-500/20">
+              <FaChartBar className="text-purple-400" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-purple-400">{stats.withCompany}</div>
+              <div className="text-sm text-white/60">With Company</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -537,20 +629,23 @@ const UsersTab = () => {
           </thead>
           <tbody className="text-white">
             {filteredUsers.length > 0 ? filteredUsers.map(user => {
-              const statusColor = getStatusColor(user.status);
               const isCurrentUser = user._id === localStorage.getItem('userId');
+              const statusColor = user.status === 'active' ? 'green' : 
+                                 user.status === 'suspended' ? 'yellow' : 'red';
               
               return (
                 <tr key={user._id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#ED1B2F] to-[#455185] flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                         <span className="font-bold text-sm">
                           {user.name?.charAt(0).toUpperCase() || 'U'}
                         </span>
                       </div>
                       <div>
-                        <div className="font-bold text-lg">{user.name || 'Unknown User'}</div>
+                        <div className="font-bold text-lg">
+                          {user.name || 'Unknown User'}
+                        </div>
                         <div className="text-xs text-white/60 flex items-center gap-1">
                           <FaEnvelope size={10} />
                           {user.email || 'No email'}
@@ -567,22 +662,20 @@ const UsersTab = () => {
                             {user.phoneNumber}
                           </div>
                         )}
-                        <div className="text-xs text-purple-400 mt-1">
-                          Role: {user.role || 'user'}
-                        </div>
+                        {user.position && (
+                          <div className="text-xs text-white/60 mt-1">
+                            {user.position}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
                   
                   <td className="p-4">
-                    {user.company ? (
-                      <div className="flex items-center gap-2">
-                        <FaBuilding className="text-blue-400" size={14} />
-                        <span className="font-medium">{user.company.name || 'Unknown Company'}</span>
-                      </div>
-                    ) : (
-                      <span className="text-white/40 text-sm">No company assigned</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <FaBriefcase className="text-blue-400" size={14} />
+                      <span className="font-medium">{getCompanyName(user)}</span>
+                    </div>
                   </td>
                   
                   <td className="p-4">
@@ -592,24 +685,11 @@ const UsersTab = () => {
                       </Badge>
                       <div className="flex flex-col gap-1">
                         <button
-                          onClick={() => {
-                            const newStatus = user.status === 'suspended' ? 'active' : 'suspended';
-                            updateUserStatus(user._id, newStatus);
-                          }}
+                          onClick={() => updateUserStatus(user._id, user.status)}
                           className="text-xs text-blue-400 hover:text-blue-300 transition-colors text-left"
                           disabled={isCurrentUser}
                         >
                           {user.status === 'suspended' ? 'Activate' : 'Suspend'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            const newStatus = user.status === 'frozen' ? 'active' : 'frozen';
-                            updateUserStatus(user._id, newStatus);
-                          }}
-                          className="text-xs text-red-400 hover:text-red-300 transition-colors text-left"
-                          disabled={isCurrentUser}
-                        >
-                          {user.status === 'frozen' ? 'Unfreeze' : 'Freeze'}
                         </button>
                       </div>
                     </div>
@@ -673,7 +753,7 @@ const UsersTab = () => {
             }) : (
               <tr>
                 <td colSpan="5" className="p-8 text-center text-white/40">
-                  <div className="text-6xl mb-4">👤</div>
+                  <div className="text-6xl mb-4">👥</div>
                   <p className="text-xl mb-2">No users found</p>
                   <p className="text-white/60 mb-4">
                     {searchTerm ? 'Try a different search term' : 
@@ -741,7 +821,7 @@ const UsersTab = () => {
                 value={formData.email}
                 onChange={handleInputChange}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
-                placeholder="john@example.com"
+                placeholder="user@example.com"
                 required
               />
             </div>
@@ -796,40 +876,61 @@ const UsersTab = () => {
             
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">
+                Position
+              </label>
+              <input
+                type="text"
+                name="position"
+                value={formData.position}
+                onChange={handleInputChange}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                placeholder="Software Engineer"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">
                 Company
               </label>
               <select
                 name="companyId"
                 value={formData.companyId}
                 onChange={handleInputChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
+                style={{
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                }}
               >
-                <option value="">Select Company</option>
-                {Array.isArray(companies) && companies.map(company => (
-                  <option key={company.id || company._id} value={company.id || company._id}>
+                <option value="" className="bg-gray-800 text-white">Select Company</option>
+                {safeCompanies.map(company => (
+                  <option 
+                    key={company._id} 
+                    value={company._id}
+                    className="bg-gray-800 text-white"
+                  >
                     {company.name}
                   </option>
                 ))}
               </select>
             </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                name="phoneNumber"
+                value={formData.phoneNumber}
+                onChange={handleInputChange}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                placeholder="+1234567890"
+              />
+            </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-white/70 mb-2">
-              Phone Number
-            </label>
-            <input
-              type="tel"
-              name="phoneNumber"
-              value={formData.phoneNumber}
-              onChange={handleInputChange}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
-              placeholder="+1234567890"
-            />
-          </div>
-
-          {/* Hidden role field */}
-          <input type="hidden" name="role" value="user" />
         </div>
 
         <div className="flex justify-end gap-3 mt-6">
@@ -895,11 +996,19 @@ const UsersTab = () => {
                 name="companyId"
                 value={formData.companyId}
                 onChange={handleInputChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
+                style={{
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                }}
               >
-                <option value="">Select Company</option>
-                {Array.isArray(companies) && companies.map(company => (
-                  <option key={company.id || company._id} value={company.id || company._id}>
+                <option value="" className="bg-gray-800 text-white">Select Company</option>
+                {safeCompanies.map(company => (
+                  <option 
+                    key={company._id} 
+                    value={company._id}
+                    className="bg-gray-800 text-white"
+                  >
                     {company.name}
                   </option>
                 ))}
@@ -908,16 +1017,29 @@ const UsersTab = () => {
             
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">
-                Phone Number
+                Position
               </label>
               <input
-                type="tel"
-                name="phoneNumber"
-                value={formData.phoneNumber}
+                type="text"
+                name="position"
+                value={formData.position}
                 onChange={handleInputChange}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              name="phoneNumber"
+              value={formData.phoneNumber}
+              onChange={handleInputChange}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            />
           </div>
 
           <div className="border-t border-white/10 pt-4">
@@ -988,7 +1110,7 @@ const UsersTab = () => {
             Are you sure you want to delete this user? This action cannot be undone.
           </p>
           <p className="text-sm text-red-400 mb-6">
-            Note: Users with existing tickets cannot be deleted.
+            Note: Users with assigned tickets cannot be deleted.
           </p>
         </div>
 

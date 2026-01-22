@@ -24,7 +24,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
-// Routes
+// Routes - REMOVE userDashboardRoutes import
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import departmentRoutes from './routes/departments.js';
@@ -33,6 +33,7 @@ import adminProfileRoutes from './routes/adminProfiles.js';
 import companyRoutes from './routes/companies.js';
 import ticketRoutes from './routes/tickets.js';
 import timeTrackingRoutes from './routes/timeTracking.js';
+// REMOVE: import userDashboardRoutes from './routes/userDashboard.js'; // Remove this
 
 // ======================= DIR SETUP =======================
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,9 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log(chalk.blue('📁 Created uploads directory'));
 }
+
+// REMOVE this line - it's causing the conflict
+// app.use('/api/dashboard', userDashboardRoutes); // Remove this line
 
 // ======================= APP SETUP =======================
 const app = express();
@@ -67,7 +71,7 @@ app.use(helmet({
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'], // Add your frontend URLs
+  origin: ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -86,10 +90,8 @@ app.use(morgan('dev'));
 app.use(limiter);
 
 // ======================= STATIC FILES =======================
-// Serve uploaded files
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res, filePath) => {
-    // Set appropriate content-type for known file types
     const ext = path.extname(filePath).toLowerCase();
     const mimeTypes = {
       '.jpg': 'image/jpeg',
@@ -107,6 +109,7 @@ app.use('/uploads', express.static(uploadsDir, {
   }
 }));
 
+// ======================= API ENDPOINTS =======================
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({
@@ -137,7 +140,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/departments', departmentRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/dashboard', dashboardRoutes); // This is your existing dashboard
 app.use('/api/admin-profiles', adminProfileRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/time-tracking', timeTrackingRoutes);
@@ -168,7 +171,6 @@ app.use((err, req, res, next) => {
 // ======================= DB + SERVER =======================
 const startServer = async () => {
   try {
-    // MongoDB connection
     if (!process.env.MONGODB_URI) {
       throw new Error('MONGODB_URI environment variable is required');
     }
@@ -180,11 +182,8 @@ const startServer = async () => {
     
     console.log(chalk.green('✓ MongoDB Connected'));
     
-    // Start server
     app.listen(PORT, () => {
-      console.log(
-        chalk.green(`✓ Server running on http://localhost:${PORT}`)
-      );
+      console.log(chalk.green(`✓ Server running on http://localhost:${PORT}`));
       console.log(chalk.blue(`📁 Uploads directory: ${uploadsDir}`));
       console.log(chalk.blue(`🌐 Health check: http://localhost:${PORT}/api/health`));
       console.log(chalk.blue(`🐛 Debug: http://localhost:${PORT}/api/debug`));

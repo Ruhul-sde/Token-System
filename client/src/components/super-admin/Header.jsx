@@ -8,10 +8,11 @@ const Header = ({ user }) => (
         <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 mb-2">
           Command Center
         </h1>
-        <p className="text-[#455185] font-semibold text-lg flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#ED1B2F] animate-pulse"></span>
-          System Operational • Welcome, {user?.name}
-        </p>
+<p className="text-white font-semibold text-lg flex items-center gap-2">
+  <span className="w-2 h-2 rounded-full bg-[#ED1B2F] animate-pulse"></span>
+  System Operational • Welcome, {user?.name}
+</p>
+
       </div>
       <div className="flex items-center gap-4 mt-4 md:mt-0">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#ED1B2F] to-[#455185] p-0.5">

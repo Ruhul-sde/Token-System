@@ -1,4 +1,3 @@
-// components/super-admin/tabs/TicketsTab.jsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import Card from '../../ui/Card';
@@ -34,7 +33,10 @@ import {
   FaFileExcel,
   FaFileArchive,
   FaEye as FaEyeIcon,
-  FaTimes
+  FaTimes,
+  FaFileContract,
+  FaArchive,
+  FaFolder
 } from 'react-icons/fa';
 import axios from 'axios';
 
@@ -429,6 +431,33 @@ const TicketsTab = () => {
     }
   };
 
+  // Get file icon for supporting documents
+  const getSupportingDocIcon = (filename) => {
+    const extension = filename.split('.').pop().toLowerCase();
+    switch (extension) {
+      case 'pdf':
+        return <FaFilePdf className="text-red-400" />;
+      case 'doc':
+      case 'docx':
+        return <FaFileWord className="text-blue-400" />;
+      case 'xls':
+      case 'xlsx':
+      case 'csv':
+        return <FaFileExcel className="text-green-500" />;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+        return <FaFileImage className="text-green-400" />;
+      case 'zip':
+      case 'rar':
+      case '7z':
+        return <FaFileArchive className="text-yellow-400" />;
+      default:
+        return <FaFileContract className="text-purple-400" />;
+    }
+  };
+
   // Format file size
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -472,12 +501,6 @@ const TicketsTab = () => {
       attachments.forEach((attachment) => {
         formData.append('attachments', attachment.file);
       });
-
-      // Log form data for debugging
-      console.log('FormData being sent:');
-      for (let pair of formData.entries()) {
-        console.log(pair[0] + ':', pair[1]);
-      }
 
       const config = { 
         headers: { 
@@ -534,9 +557,21 @@ const TicketsTab = () => {
   };
 
   // View ticket details
-  const viewTicketDetails = (ticket) => {
-    setSelectedTicket(ticket);
-    setShowTicketDetailModal(true);
+  const viewTicketDetails = async (ticket) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = { 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      };
+
+      // Fetch full ticket details with attachments
+      const response = await axios.get(`${API_URL}/tickets/${ticket._id}`, config);
+      setSelectedTicket(response.data);
+      setShowTicketDetailModal(true);
+    } catch (error) {
+      console.error('Error fetching ticket details:', error);
+      alert('Failed to load ticket details');
+    }
   };
 
   // Delete attachment
@@ -561,6 +596,33 @@ const TicketsTab = () => {
     } catch (error) {
       console.error('Error deleting attachment:', error);
       alert('Failed to delete attachment');
+    }
+  };
+
+  // Delete supporting document
+  const deleteSupportingDocument = async (ticketId, docId) => {
+    if (!window.confirm('Are you sure you want to delete this supporting document?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const config = { 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      };
+
+      // Note: You might need to create a separate endpoint for supporting docs
+      // For now, using the same endpoint as regular attachments
+      await axios.delete(`${API_URL}/tickets/${ticketId}/attachment/${docId}`, config);
+      
+      // Refresh ticket data
+      const response = await axios.get(`${API_URL}/tickets/${ticketId}`, config);
+      setSelectedTicket(response.data);
+      
+      alert('Supporting document deleted successfully');
+    } catch (error) {
+      console.error('Error deleting supporting document:', error);
+      alert('Failed to delete supporting document');
     }
   };
 
@@ -666,13 +728,21 @@ const TicketsTab = () => {
         
         <div>
           <select
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
             value={filters.company}
             onChange={(e) => setFilters({...filters, company: e.target.value})}
+            style={{
+              color: '#ffffff',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)'
+            }}
           >
-            <option value="all">All Companies</option>
+            <option value="all" className="bg-gray-900 text-white">All Companies</option>
             {companies.map(company => (
-              <option key={company._id} value={company._id}>
+              <option 
+                key={company._id} 
+                value={company._id}
+                className="bg-gray-900 text-white"
+              >
                 {company.name}
               </option>
             ))}
@@ -681,13 +751,21 @@ const TicketsTab = () => {
         
         <div>
           <select
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
             value={filters.department}
             onChange={(e) => setFilters({...filters, department: e.target.value})}
+            style={{
+              color: '#ffffff',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)'
+            }}
           >
-            <option value="all">All Departments</option>
+            <option value="all" className="bg-gray-900 text-white">All Departments</option>
             {departments.map(dept => (
-              <option key={dept._id} value={dept._id}>
+              <option 
+                key={dept._id} 
+                value={dept._id}
+                className="bg-gray-900 text-white"
+              >
                 {dept.name}
               </option>
             ))}
@@ -696,24 +774,44 @@ const TicketsTab = () => {
         
         <div className="grid grid-cols-2 gap-3">
           <select
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
             value={filters.status}
             onChange={(e) => setFilters({...filters, status: e.target.value})}
+            style={{
+              color: '#ffffff',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)'
+            }}
           >
-            <option value="all">All Status</option>
+            <option value="all" className="bg-gray-900 text-white">All Status</option>
             {statuses.map(status => (
-              <option key={status} value={status}>{status}</option>
+              <option 
+                key={status} 
+                value={status}
+                className="bg-gray-900 text-white"
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </option>
             ))}
           </select>
           
           <select
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
             value={filters.priority}
             onChange={(e) => setFilters({...filters, priority: e.target.value})}
+            style={{
+              color: '#ffffff',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)'
+            }}
           >
-            <option value="all">All Priorities</option>
+            <option value="all" className="bg-gray-900 text-white">All Priorities</option>
             {priorities.map(priority => (
-              <option key={priority} value={priority}>{priority}</option>
+              <option 
+                key={priority} 
+                value={priority}
+                className="bg-gray-900 text-white"
+              >
+                {priority.charAt(0).toUpperCase() + priority.slice(1)}
+              </option>
             ))}
           </select>
         </div>
@@ -780,10 +878,10 @@ const TicketsTab = () => {
                           : ticket.description}
                       </div>
                     )}
-                    {ticket.attachments && ticket.attachments.length > 0 && (
+                    {ticket.attachmentCount > 0 && (
                       <div className="flex items-center gap-1 mt-2 text-xs text-blue-400">
                         <FaPaperclip size={10} />
-                        {ticket.attachments.length} attachment{ticket.attachments.length !== 1 ? 's' : ''}
+                        {ticket.attachmentCount} attachment{ticket.attachmentCount !== 1 ? 's' : ''}
                       </div>
                     )}
                   </td>
@@ -933,12 +1031,20 @@ const TicketsTab = () => {
                 name="companyId"
                 value={newTicketData.companyId}
                 onChange={handleNewTicketChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
                 required
+                style={{
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                }}
               >
-                <option value="">Select Company</option>
+                <option value="" className="bg-gray-900 text-white">Select Company</option>
                 {companies.map(company => (
-                  <option key={company._id} value={company._id}>
+                  <option 
+                    key={company._id} 
+                    value={company._id}
+                    className="bg-gray-900 text-white"
+                  >
                     {company.name}
                   </option>
                 ))}
@@ -953,11 +1059,15 @@ const TicketsTab = () => {
                 name="userId"
                 value={newTicketData.userId}
                 onChange={handleNewTicketChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
                 required
                 disabled={!newTicketData.companyId || companyUsers.length === 0}
+                style={{
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                }}
               >
-                <option value="">
+                <option value="" className="bg-gray-900 text-white">
                   {!newTicketData.companyId 
                     ? 'Select company first' 
                     : companyUsers.length === 0 
@@ -965,7 +1075,11 @@ const TicketsTab = () => {
                     : 'Select User'}
                 </option>
                 {companyUsers.map(user => (
-                  <option key={user._id} value={user._id}>
+                  <option 
+                    key={user._id} 
+                    value={user._id}
+                    className="bg-gray-900 text-white"
+                  >
                     {user.name} ({user.email})
                   </option>
                 ))}
@@ -983,12 +1097,20 @@ const TicketsTab = () => {
                 name="departmentId"
                 value={newTicketData.departmentId}
                 onChange={handleNewTicketChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
                 required
+                style={{
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                }}
               >
-                <option value="">Select Department</option>
+                <option value="" className="bg-gray-900 text-white">Select Department</option>
                 {departments.map(dept => (
-                  <option key={dept._id} value={dept._id}>
+                  <option 
+                    key={dept._id} 
+                    value={dept._id}
+                    className="bg-gray-900 text-white"
+                  >
                     {dept.name}
                   </option>
                 ))}
@@ -1003,17 +1125,25 @@ const TicketsTab = () => {
                 name="category"
                 value={newTicketData.category}
                 onChange={handleNewTicketChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
                 required
                 disabled={!newTicketData.departmentId || departmentCategories.length === 0}
+                style={{
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                }}
               >
-                <option value="">
+                <option value="" className="bg-gray-900 text-white">
                   {!newTicketData.departmentId 
                     ? 'Select department first' 
                     : 'Select Category'}
                 </option>
                 {departmentCategories.map((cat, index) => (
-                  <option key={index} value={cat}>
+                  <option 
+                    key={index} 
+                    value={cat}
+                    className="bg-gray-900 text-white"
+                  >
                     {cat}
                   </option>
                 ))}
@@ -1031,11 +1161,15 @@ const TicketsTab = () => {
                 name="priority"
                 value={newTicketData.priority}
                 onChange={handleNewTicketChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent appearance-none"
+                style={{
+                  color: '#ffffff',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                }}
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
+                <option value="low" className="bg-gray-900 text-white">Low</option>
+                <option value="medium" className="bg-gray-900 text-white">Medium</option>
+                <option value="high" className="bg-gray-900 text-white">High</option>
               </select>
             </div>
             
@@ -1238,22 +1372,11 @@ const TicketsTab = () => {
               </div>
             </div>
 
-            {/* Attachments Section */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <h5 className="font-bold text-white">Attachments ({selectedTicket.attachments?.length || 0})</h5>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => addMoreAttachments(selectedTicket._id)}
-                  className="flex items-center gap-2"
-                >
-                  <FaUpload size={12} />
-                  Add More
-                </Button>
-              </div>
-              
-              {selectedTicket.attachments && selectedTicket.attachments.length > 0 ? (
+            {/* Main Attachments Section */}
+            {(selectedTicket.attachments && selectedTicket.attachments.length > 0) && (
+              <div>
+                <h5 className="font-bold text-white mb-2">Attachments ({selectedTicket.attachments?.length || 0})</h5>
+                
                 <div className="space-y-3">
                   {selectedTicket.attachments.map((attachment) => (
                     <div key={attachment._id} className="bg-white/5 p-4 rounded-lg hover:bg-white/10 transition-colors">
@@ -1313,22 +1436,107 @@ const TicketsTab = () => {
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="bg-white/5 p-6 rounded-lg text-center">
-                  <FaPaperclip className="text-3xl text-white/30 mx-auto mb-3" />
-                  <p className="text-white/60">No attachments uploaded</p>
+              </div>
+            )}
+
+            {/* Supporting Documents Section */}
+            {(selectedTicket.supportingDocuments && selectedTicket.supportingDocuments.length > 0) && (
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <h5 className="font-bold text-white flex items-center gap-2">
+                    <FaFileContract className="text-purple-400" />
+                    Supporting Documents ({selectedTicket.supportingDocuments.length})
+                  </h5>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => addMoreAttachments(selectedTicket._id)}
-                    className="mt-3"
+                    className="flex items-center gap-2"
                   >
-                    <FaUpload className="mr-2" />
-                    Upload Files
+                    <FaUpload size={12} />
+                    Add More
                   </Button>
                 </div>
-              )}
-            </div>
+                
+                <div className="space-y-3">
+                  {selectedTicket.supportingDocuments.map((doc) => (
+                    <div key={doc._id} className="bg-white/5 p-4 rounded-lg hover:bg-white/10 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          {getSupportingDocIcon(doc.originalName || doc.filename)}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-medium truncate">
+                              {doc.originalName || doc.filename}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-white/40">
+                              <span>Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()}</span>
+                              {doc.size && <span>• {formatFileSize(doc.size)}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => viewAttachment(selectedTicket._id, doc._id, doc.originalName || doc.filename)}
+                            disabled={downloadingAttachments[doc._id]}
+                            className="flex items-center gap-1"
+                            title="View in browser"
+                          >
+                            {downloadingAttachments[doc._id] ? (
+                              <FaSpinner className="animate-spin" size={12} />
+                            ) : (
+                              <FaEyeIcon size={12} />
+                            )}
+                            View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => downloadAttachment(selectedTicket._id, doc._id, doc.originalName || doc.filename)}
+                            disabled={downloadingAttachments[doc._id]}
+                            className="flex items-center gap-1"
+                            title="Download file"
+                          >
+                            {downloadingAttachments[doc._id] ? (
+                              <FaSpinner className="animate-spin" size={12} />
+                            ) : (
+                              <FaDownload size={12} />
+                            )}
+                            Download
+                          </Button>
+                          <button
+                            onClick={() => deleteSupportingDocument(selectedTicket._id, doc._id)}
+                            className="text-red-400 hover:text-red-300 p-1"
+                            title="Delete document"
+                          >
+                            <FaTrash size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Combined Empty State */}
+            {(!selectedTicket.attachments || selectedTicket.attachments.length === 0) && 
+             (!selectedTicket.supportingDocuments || selectedTicket.supportingDocuments.length === 0) && (
+              <div className="bg-white/5 p-6 rounded-lg text-center">
+                <FaPaperclip className="text-3xl text-white/30 mx-auto mb-3" />
+                <p className="text-white/60">No attachments or supporting documents</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => addMoreAttachments(selectedTicket._id)}
+                  className="mt-3"
+                >
+                  <FaUpload className="mr-2" />
+                  Upload Files
+                </Button>
+              </div>
+            )}
 
             {/* Time Tracking */}
             {selectedTicket.timeToSolve && (

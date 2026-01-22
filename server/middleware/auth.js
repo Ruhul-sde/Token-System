@@ -53,7 +53,8 @@ export const authenticate = async (req, res, next) => {
     console.log('AUTH OK:', {
       email: user.email,
       role: user.role,
-      department: user.department?.name || 'none'
+      department: user.department?.name || 'none',
+      status: user.status
     });
 
     next();

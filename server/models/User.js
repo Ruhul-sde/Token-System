@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'superadmin'],
+    enum: ['user', 'admin', 'superadmin'], // Added 'admin'
     default: 'user'
   },
   department: {
@@ -102,5 +102,6 @@ userSchema.index({ role: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ department: 1 });
 userSchema.index({ createdAt: -1 });
+userSchema.index({ role: 1, status: 1 }); // Added for better filtering
 
 export default mongoose.model('User', userSchema);

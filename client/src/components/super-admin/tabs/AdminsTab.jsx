@@ -1,4 +1,3 @@
-// components/super-admin/tabs/AdminsTab.jsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import Card from '../../ui/Card';
@@ -18,12 +17,17 @@ import {
   FaUserCheck,
   FaUserSlash,
   FaSync,
-  FaExclamationCircle
+  FaEnvelope,
+  FaCalendarAlt,
+  FaExclamationCircle,
+  FaKey,
+  FaUsers,
+  FaUserTie
 } from 'react-icons/fa';
 
 const AdminsTab = () => {
   const { API_URL } = useAuth();
-  const [adminProfiles, setAdminProfiles] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -50,12 +54,10 @@ const AdminsTab = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    employeeId: '',
+    employeeCode: '',
     departmentId: '',
-    phone: '',
-    expertise: [],
-    categories: [],
-    role: 'admin' // Explicitly set role to 'admin'
+    phoneNumber: '',
+    position: ''
   });
 
   // Error state
@@ -74,63 +76,38 @@ const AdminsTab = () => {
         headers: { 'Authorization': `Bearer ${token}` } 
       };
 
-      // Fetch admins (users with admin role)
-      const usersResponse = await axios.get(`${API_URL}/users?role=admin`, config);
-      const adminUsers = usersResponse.data.users || [];
+      // Fetch admins using role-specific endpoint
+      const adminsResponse = await axios.get(`${API_URL}/users/role/admin`, config);
+      const adminUsersData = adminsResponse.data.users || [];
       
-      console.log('Fetched admin users:', adminUsers.length, adminUsers.map(u => ({
-        name: u.name,
-        role: u.role,
-        email: u.email
-      })));
+      setAdminUsers(adminUsersData);
       
-      // Transform users to admin profiles format
-      const adminProfilesData = adminUsers.map(user => ({
-        _id: user._id,
-        user: {
-          _id: user._id,
-          name: user.name,
-          email: user.email
-        },
-        employeeId: user.employeeCode || '',
-        department: user.department,
-        phone: user.phoneNumber || '',
-        isActive: user.status === 'active',
-        role: user.role || 'admin', // Ensure role is included
-        expertise: [], // Would come from admin profile if separate model exists
-        categories: [] // Would come from admin profile if separate model exists
-      }));
-
-      setAdminProfiles(adminProfilesData);
+      // Update stats from API response
+      if (adminsResponse.data.stats) {
+        setStats({
+          totalAdmins: adminsResponse.data.stats.total || 0,
+          activeAdmins: adminsResponse.data.stats.active || 0,
+          inactiveAdmins: (adminsResponse.data.stats.suspended || 0) + (adminsResponse.data.stats.frozen || 0),
+          departmentsCovered: adminsResponse.data.stats.withDepartment || 0
+        });
+      }
 
       // Fetch departments
-      const departmentsResponse = await axios.get(`${API_URL}/departments`, config);
-      const departmentsData = departmentsResponse.data.departments || 
-                              departmentsResponse.data || 
-                              [];
-      setDepartments(Array.isArray(departmentsData) ? departmentsData : []);
-
-      // Calculate stats
-      const totalAdmins = adminProfilesData.length;
-      const activeAdmins = adminProfilesData.filter(a => a.isActive).length;
-      const inactiveAdmins = adminProfilesData.filter(a => !a.isActive).length;
-      const uniqueDepartments = [...new Set(
-        adminProfilesData
-          .map(a => a.department?._id)
-          .filter(Boolean)
-      )].length;
-
-      setStats({
-        totalAdmins,
-        activeAdmins,
-        inactiveAdmins,
-        departmentsCovered: uniqueDepartments
-      });
+      try {
+        const departmentsResponse = await axios.get(`${API_URL}/departments`, config);
+        const departmentsData = departmentsResponse.data.departments || 
+                                departmentsResponse.data || 
+                                [];
+        setDepartments(Array.isArray(departmentsData) ? departmentsData : []);
+      } catch (deptError) {
+        console.warn('Could not fetch departments:', deptError);
+        setDepartments([]);
+      }
 
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching admin data:', error);
       setError(error.response?.data?.message || error.message);
-      setAdminProfiles([]);
+      setAdminUsers([]);
       setDepartments([]);
     } finally {
       setLoading(false);
@@ -141,22 +118,26 @@ const AdminsTab = () => {
     fetchData();
   }, []);
 
-  // Filter admins
-  const filteredAdmins = Array.isArray(adminProfiles) ? adminProfiles.filter(admin => {
-    const matchesSearch = searchTerm === '' || 
-      admin.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      admin.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      admin.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesDept = filterDept === 'all' || 
-      (admin.department && admin.department._id === filterDept);
-    
-    const matchesStatus = filterStatus === 'all' || 
-      (filterStatus === 'active' && admin.isActive) ||
-      (filterStatus === 'inactive' && !admin.isActive);
-    
-    return matchesSearch && matchesDept && matchesStatus;
-  }) : [];
+  // Filter admins function
+  const filterAdmins = () => {
+    return Array.isArray(adminUsers) ? adminUsers.filter(admin => {
+      const matchesSearch = searchTerm === '' || 
+        admin.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        admin.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        admin.employeeCode?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesDept = filterDept === 'all' || 
+        (admin.department && admin.department._id === filterDept) ||
+        (admin.departmentId === filterDept);
+      
+      const matchesStatus = filterStatus === 'all' || 
+        admin.status === filterStatus;
+      
+      return matchesSearch && matchesDept && matchesStatus;
+    }) : [];
+  };
+
+  const filteredAdmins = filterAdmins();
 
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -174,12 +155,10 @@ const AdminsTab = () => {
       email: '',
       password: '',
       confirmPassword: '',
-      employeeId: '',
+      employeeCode: '',
       departmentId: '',
-      phone: '',
-      expertise: [],
-      categories: [],
-      role: 'admin' // Explicitly set for new admins
+      phoneNumber: '',
+      position: ''
     });
     setShowCreateModal(true);
   };
@@ -188,16 +167,14 @@ const AdminsTab = () => {
   const openEditModal = (admin) => {
     setSelectedAdmin(admin);
     setFormData({
-      name: admin.user?.name || '',
-      email: admin.user?.email || '',
+      name: admin.name || '',
+      email: admin.email || '',
       password: '',
       confirmPassword: '',
-      employeeId: admin.employeeId || '',
-      departmentId: admin.department?._id || '',
-      phone: admin.phone || '',
-      expertise: admin.expertise || [],
-      categories: admin.categories || [],
-      role: 'admin' // Ensure role remains 'admin'
+      employeeCode: admin.employeeCode || '',
+      departmentId: admin.department?._id || admin.departmentId || '',
+      phoneNumber: admin.phoneNumber || '',
+      position: admin.position || ''
     });
     setShowEditModal(true);
   };
@@ -235,34 +212,21 @@ const AdminsTab = () => {
         } 
       };
 
-      // Log data for debugging
-      console.log('Creating admin with data:', {
-        ...formData,
-        role: 'admin'
-      });
-
       // Create user with admin role
       const userData = {
         name: formData.name,
         email: formData.email,
         password: formData.password,
         role: 'admin', // Explicitly set role to 'admin'
-        employeeCode: formData.employeeId || undefined,
+        employeeCode: formData.employeeCode || undefined,
         departmentId: formData.departmentId || undefined,
-        phoneNumber: formData.phone || undefined,
-        status: 'active'
+        phoneNumber: formData.phoneNumber || undefined,
+        position: formData.position || undefined
       };
 
       const response = await axios.post(`${API_URL}/users`, userData, config);
       
-      console.log('Create admin response:', response.data);
-      
       if (response.data.success) {
-        // Verify the created admin has correct role
-        if (response.data.user && response.data.user.role !== 'admin') {
-          console.warn('Warning: Created admin has role', response.data.user.role, 'but expected: admin');
-        }
-        
         setShowCreateModal(false);
         await fetchData();
         alert('Admin created successfully!');
@@ -272,7 +236,6 @@ const AdminsTab = () => {
 
     } catch (error) {
       console.error('Error creating admin:', error);
-      console.error('Error details:', error.response?.data);
       alert(`Failed to create admin: ${error.response?.data?.message || error.message}`);
     }
   };
@@ -292,10 +255,11 @@ const AdminsTab = () => {
 
       const userData = {
         name: formData.name,
-        employeeCode: formData.employeeId || null,
+        employeeCode: formData.employeeCode || null,
         departmentId: formData.departmentId || null,
-        phoneNumber: formData.phone || null,
-        role: 'admin' // Ensure role remains 'admin'
+        phoneNumber: formData.phoneNumber || null,
+        position: formData.position || null,
+        role: 'admin' // Ensure role stays as admin
       };
 
       // Only include password if provided
@@ -311,15 +275,11 @@ const AdminsTab = () => {
         userData.password = formData.password;
       }
 
-      console.log('Updating admin with data:', userData);
-
       const response = await axios.put(
         `${API_URL}/users/${selectedAdmin._id}`, 
         userData, 
         config
       );
-      
-      console.log('Update admin response:', response.data);
       
       if (response.data.success) {
         setShowEditModal(false);
@@ -361,10 +321,10 @@ const AdminsTab = () => {
     }
   };
 
-  // Toggle admin status
-  const toggleAdminStatus = async (adminId, currentStatus) => {
+  // Update admin status
+  const updateAdminStatus = async (adminId, currentStatus) => {
     try {
-      const newStatus = currentStatus ? 'suspended' : 'active';
+      const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
       const reason = prompt(`Reason for ${newStatus} status:`);
       if (reason === null) return;
 
@@ -387,12 +347,56 @@ const AdminsTab = () => {
       }
 
     } catch (error) {
-      console.error('Error toggling admin status:', error);
+      console.error('Error updating admin status:', error);
       alert(`Failed to update status: ${error.response?.data?.message || error.message}`);
     }
   };
 
-  if (loading && adminProfiles.length === 0) {
+  // Reset admin password
+  const resetAdminPassword = async (adminId) => {
+    const newPassword = prompt('Enter new password for this admin:');
+    if (!newPassword || newPassword.length < 6) {
+      alert('Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const config = { 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      };
+
+      const response = await axios.post(
+        `${API_URL}/users/${adminId}/reset-password`, 
+        { newPassword }, 
+        config
+      );
+      
+      if (response.data.success) {
+        alert('Password reset successfully!');
+      } else {
+        throw new Error(response.data.message || 'Failed to reset password');
+      }
+
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      alert(`Failed to reset password: ${error.response?.data?.message || error.message}`);
+    }
+  };
+
+  // Get department name by ID
+  const getDepartmentName = (admin) => {
+    if (admin.department && admin.department.name) {
+      return admin.department.name;
+    }
+    if (admin.departmentId) {
+      const dept = safeDepartments.find(d => d._id === admin.departmentId);
+      return dept ? dept.name : 'Unknown Department';
+    }
+    return 'No department';
+  };
+
+  if (loading && adminUsers.length === 0) {
     return (
       <Card className="overflow-hidden">
         <div className="flex flex-col items-center justify-center h-96">
@@ -470,7 +474,7 @@ const AdminsTab = () => {
         
         <div>
           <select
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            className="w-full bg-[#1E293B] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
             value={filterDept}
             onChange={(e) => setFilterDept(e.target.value)}
           >
@@ -485,13 +489,14 @@ const AdminsTab = () => {
         
         <div>
           <select
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            className="w-full bg-[#1E293B] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="suspended">Suspended</option>
+            <option value="frozen">Frozen</option>
           </select>
         </div>
       </div>
@@ -499,23 +504,51 @@ const AdminsTab = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
-          <div className="text-2xl font-bold text-white">{stats.totalAdmins}</div>
-          <div className="text-sm text-white/60">Total Admins</div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-red-500/20">
+              <FaUserShield className="text-red-400" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-white">{stats.totalAdmins}</div>
+              <div className="text-sm text-white/60">Total Admins</div>
+            </div>
+          </div>
         </div>
         
         <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
-          <div className="text-2xl font-bold text-emerald-400">{stats.activeAdmins}</div>
-          <div className="text-sm text-white/60">Active</div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-500/20">
+              <FaUserCheck className="text-emerald-400" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-emerald-400">{stats.activeAdmins}</div>
+              <div className="text-sm text-white/60">Active</div>
+            </div>
+          </div>
         </div>
         
         <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
-          <div className="text-2xl font-bold text-red-400">{stats.inactiveAdmins}</div>
-          <div className="text-sm text-white/60">Inactive</div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-yellow-500/20">
+              <FaUserSlash className="text-yellow-400" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-yellow-400">{stats.inactiveAdmins}</div>
+              <div className="text-sm text-white/60">Inactive</div>
+            </div>
+          </div>
         </div>
         
         <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
-          <div className="text-2xl font-bold text-yellow-400">{stats.departmentsCovered}</div>
-          <div className="text-sm text-white/60">Departments Covered</div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-500/20">
+              <FaBuilding className="text-purple-400" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-purple-400">{stats.departmentsCovered}</div>
+              <div className="text-sm text-white/60">Departments</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -525,16 +558,17 @@ const AdminsTab = () => {
           <thead>
             <tr className="border-b border-white/10 text-white/50 text-sm uppercase tracking-wider">
               <th className="p-4">Admin Details</th>
-              <th className="p-4">Contact Info</th>
               <th className="p-4">Department</th>
-              <th className="p-4">Employee ID</th>
               <th className="p-4">Status</th>
+              <th className="p-4">Last Activity</th>
               <th className="p-4">Actions</th>
             </tr>
           </thead>
           <tbody className="text-white">
             {filteredAdmins.length > 0 ? filteredAdmins.map(admin => {
               const isCurrentUser = admin._id === localStorage.getItem('userId');
+              const statusColor = admin.status === 'active' ? 'green' : 
+                                 admin.status === 'suspended' ? 'yellow' : 'red';
               
               return (
                 <tr key={admin._id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
@@ -542,70 +576,79 @@ const AdminsTab = () => {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#ED1B2F] to-[#455185] flex items-center justify-center">
                         <span className="font-bold text-sm">
-                          {admin.user?.name?.charAt(0).toUpperCase() || 'A'}
+                          {admin.name?.charAt(0).toUpperCase() || 'A'}
                         </span>
                       </div>
                       <div>
-                        <div className="font-bold text-lg">{admin.user?.name || 'Unknown Admin'}</div>
-                        <div className="text-xs text-white/60">
-                          {admin.expertise?.length > 0 
-                            ? `Expertise: ${admin.expertise.slice(0, 2).join(', ')}`
-                            : 'No expertise defined'
-                          }
+                        <div className="font-bold text-lg flex items-center gap-2">
+                          {admin.name || 'Unknown Admin'}
+                          <Badge color="red" size="sm">ADMIN</Badge>
                         </div>
-                        <div className="text-xs text-purple-400 mt-1">
-                          Role: {admin.role || 'admin'}
+                        <div className="text-xs text-white/60 flex items-center gap-1">
+                          <FaEnvelope size={10} />
+                          {admin.email || 'No email'}
                         </div>
+                        {admin.employeeCode && (
+                          <div className="text-xs text-blue-400 mt-1 flex items-center gap-1">
+                            <FaIdCard size={10} />
+                            ID: {admin.employeeCode}
+                          </div>
+                        )}
+                        {admin.phoneNumber && (
+                          <div className="text-xs text-white/40 mt-1 flex items-center gap-1">
+                            <FaPhone size={10} />
+                            {admin.phoneNumber}
+                          </div>
+                        )}
+                        {admin.position && (
+                          <div className="text-xs text-white/60 mt-1">
+                            {admin.position}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                      <FaBuilding className="text-blue-400" size={14} />
+                      <span className="font-medium">{getDepartmentName(admin)}</span>
+                    </div>
+                  </td>
+                  
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                      <Badge color={statusColor}>
+                        {admin.status || 'active'}
+                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() => updateAdminStatus(admin._id, admin.status)}
+                          className="text-xs text-blue-400 hover:text-blue-300 transition-colors text-left"
+                          disabled={isCurrentUser}
+                        >
+                          {admin.status === 'suspended' ? 'Activate' : 'Suspend'}
+                        </button>
                       </div>
                     </div>
                   </td>
                   
                   <td className="p-4">
                     <div className="space-y-1">
-                      <div className="text-sm text-white/90">{admin.user?.email || 'No email'}</div>
-                      {admin.phone && (
-                        <div className="text-xs text-white/60 flex items-center gap-1">
-                          <FaPhone size={10} />
-                          {admin.phone}
+                      <div className="text-sm">
+                        <FaCalendarAlt className="inline mr-1" size={12} />
+                        Joined: {admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : 'Unknown'}
+                      </div>
+                      {admin.lastLogin && (
+                        <div className="text-xs text-white/60">
+                          Last login: {new Date(admin.lastLogin).toLocaleDateString()}
                         </div>
                       )}
-                    </div>
-                  </td>
-                  
-                  <td className="p-4">
-                    {admin.department ? (
-                      <div className="flex items-center gap-2">
-                        <FaBuilding className="text-blue-400" size={14} />
-                        <span className="font-medium">{admin.department.name || 'Unknown Department'}</span>
-                      </div>
-                    ) : (
-                      <span className="text-white/40 text-sm">No department assigned</span>
-                    )}
-                  </td>
-                  
-                  <td className="p-4">
-                    {admin.employeeId ? (
-                      <div className="flex items-center gap-2">
-                        <FaIdCard className="text-purple-400" size={14} />
-                        <span className="font-medium">{admin.employeeId}</span>
-                      </div>
-                    ) : (
-                      <span className="text-white/40 text-sm">Not set</span>
-                    )}
-                  </td>
-                  
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <Badge color={admin.isActive ? 'green' : 'red'}>
-                        {admin.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                      <button
-                        onClick={() => toggleAdminStatus(admin._id, admin.isActive)}
-                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                        disabled={isCurrentUser}
-                      >
-                        {admin.isActive ? 'Deactivate' : 'Activate'}
-                      </button>
+                      {admin.statusReason && (
+                        <div className="text-xs text-white/40 italic mt-1">
+                          "{admin.statusReason}"
+                        </div>
+                      )}
                     </div>
                   </td>
                   
@@ -624,15 +667,11 @@ const AdminsTab = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => toggleAdminStatus(admin._id, admin.isActive)}
+                          onClick={() => resetAdminPassword(admin._id)}
                           className="flex items-center gap-1 justify-center"
-                          disabled={isCurrentUser}
                         >
-                          {admin.isActive ? (
-                            <><FaUserSlash /> Deactivate</>
-                          ) : (
-                            <><FaUserCheck /> Activate</>
-                          )}
+                          <FaKey />
+                          Reset PW
                         </Button>
                         <Button
                           variant="danger"
@@ -651,7 +690,7 @@ const AdminsTab = () => {
               );
             }) : (
               <tr>
-                <td colSpan="6" className="p-8 text-center text-white/40">
+                <td colSpan="5" className="p-8 text-center text-white/40">
                   <div className="text-6xl mb-4">👨‍💼</div>
                   <p className="text-xl mb-2">No admins found</p>
                   <p className="text-white/60 mb-4">
@@ -761,12 +800,12 @@ const AdminsTab = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">
-                Employee ID
+                Employee Code
               </label>
               <input
                 type="text"
-                name="employeeId"
-                value={formData.employeeId}
+                name="employeeCode"
+                value={formData.employeeCode}
                 onChange={handleInputChange}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
                 placeholder="ADM001"
@@ -775,13 +814,29 @@ const AdminsTab = () => {
             
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">
+                Position
+              </label>
+              <input
+                type="text"
+                name="position"
+                value={formData.position}
+                onChange={handleInputChange}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                placeholder="System Administrator"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">
                 Department
               </label>
               <select
                 name="departmentId"
                 value={formData.departmentId}
                 onChange={handleInputChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
               >
                 <option value="">Select Department</option>
                 {safeDepartments.map(dept => (
@@ -791,24 +846,21 @@ const AdminsTab = () => {
                 ))}
               </select>
             </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                name="phoneNumber"
+                value={formData.phoneNumber}
+                onChange={handleInputChange}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                placeholder="+1234567890"
+              />
+            </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-white/70 mb-2">
-              Phone Number
-            </label>
-            <input
-              type="tel"
-              name="phone"
-              value={formData.phone}
-              onChange={handleInputChange}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
-              placeholder="+1234567890"
-            />
-          </div>
-
-          {/* Hidden role field */}
-          <input type="hidden" name="role" value="admin" />
         </div>
 
         <div className="flex justify-end gap-3 mt-6">
@@ -832,7 +884,7 @@ const AdminsTab = () => {
       <Modal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
-        title={`Edit Admin: ${selectedAdmin?.user?.name || ''}`}
+        title={`Edit Admin: ${selectedAdmin?.name || ''}`}
         size="lg"
       >
         <div className="space-y-4">
@@ -853,12 +905,12 @@ const AdminsTab = () => {
             
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">
-                Employee ID
+                Employee Code
               </label>
               <input
                 type="text"
-                name="employeeId"
-                value={formData.employeeId}
+                name="employeeCode"
+                value={formData.employeeCode}
                 onChange={handleInputChange}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
               />
@@ -874,7 +926,7 @@ const AdminsTab = () => {
                 name="departmentId"
                 value={formData.departmentId}
                 onChange={handleInputChange}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                className="w-full bg-[#1E293B] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
               >
                 <option value="">Select Department</option>
                 {safeDepartments.map(dept => (
@@ -887,16 +939,29 @@ const AdminsTab = () => {
             
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">
-                Phone Number
+                Position
               </label>
               <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
+                type="text"
+                name="position"
+                value={formData.position}
                 onChange={handleInputChange}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              name="phoneNumber"
+              value={formData.phoneNumber}
+              onChange={handleInputChange}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+            />
           </div>
 
           <div className="border-t border-white/10 pt-4">
@@ -961,7 +1026,7 @@ const AdminsTab = () => {
             <FaTrash className="text-red-400 text-2xl" />
           </div>
           <h3 className="text-xl font-bold text-white mb-2">
-            Delete {selectedAdmin?.user?.name || 'Admin'}?
+            Delete {selectedAdmin?.name || 'Admin'}?
           </h3>
           <p className="text-white/70 mb-4">
             Are you sure you want to delete this admin? This action cannot be undone.
