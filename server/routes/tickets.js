@@ -2,8 +2,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import Ticket from '../models/Ticket.js';
 import Department from '../models/Department.js';
 import { authenticate, authorize } from '../middleware/auth.js';
@@ -19,28 +17,13 @@ const router = express.Router();
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 /* ===================== MULTER SETUP ===================== */
-// Create uploads directory if it doesn't exist
-const uploadDir = 'uploads';
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Configure storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  }
-});
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
 
 // File filter
 const fileFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt|csv/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const extname = allowedTypes.test(file.originalname.toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype);
   
   if (mimetype && extname) {
@@ -53,7 +36,10 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ 
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { 
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 10 // Max 10 files
+  }
 });
 
 /* ===================== TICKET NUMBER GENERATION ===================== */
@@ -115,10 +101,13 @@ router.post('/', authenticate, upload.array('attachments', 10), async (req, res)
     const departmentId = isValidObjectId(department) ? department : null;
     const ticketNumber = await generateTicketNumber(departmentId);
 
-    // Process uploaded files
+    // Process uploaded files - store in database
     const attachments = req.files?.map(file => ({
-      filename: file.originalname,
-      url: `/uploads/${file.filename}`,
+      filename: `${Date.now()}-${file.originalname}`,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      data: file.buffer, // Store buffer directly in database
       uploadedAt: new Date()
     })) || [];
 
@@ -245,6 +234,302 @@ router.post('/json', authenticate, async (req, res) => {
   }
 });
 
+/* ===================== DOWNLOAD ATTACHMENT ===================== */
+router.get('/:ticketId/attachment/:attachmentId', authenticate, async (req, res) => {
+  try {
+    const { ticketId, attachmentId } = req.params;
+    
+    // Validate IDs
+    if (!isValidObjectId(ticketId) || !isValidObjectId(attachmentId)) {
+      return res.status(400).json({ message: 'Invalid ID format' });
+    }
+    
+    // Find the ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Find the attachment
+    const attachment = ticket.attachments.id(attachmentId);
+    if (!attachment) {
+      return res.status(404).json({ message: 'Attachment not found' });
+    }
+    
+    // Check permissions
+    if (req.user.role === 'user' && ticket.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
+    }
+    
+    // Set headers
+    const filename = encodeURIComponent(attachment.originalName || attachment.filename);
+    res.set({
+      'Content-Type': attachment.mimeType || 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': attachment.size,
+      'Cache-Control': 'private, max-age=3600'
+    });
+    
+    // Send file buffer
+    res.send(attachment.data);
+    
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ 
+      message: 'Failed to download file', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
+  }
+});
+
+/* ===================== VIEW/GET ATTACHMENT INLINE ===================== */
+router.get('/:ticketId/view/:attachmentId', authenticate, async (req, res) => {
+  try {
+    const { ticketId, attachmentId } = req.params;
+    
+    // Validate IDs
+    if (!isValidObjectId(ticketId) || !isValidObjectId(attachmentId)) {
+      return res.status(400).json({ message: 'Invalid ID format' });
+    }
+    
+    // Find the ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Find the attachment
+    const attachment = ticket.attachments.id(attachmentId);
+    if (!attachment) {
+      return res.status(404).json({ message: 'Attachment not found' });
+    }
+    
+    // Check permissions
+    if (req.user.role === 'user' && ticket.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
+    }
+    
+    // Check if file type can be displayed inline (images, PDFs)
+    const viewableTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'text/plain'];
+    const canDisplayInline = viewableTypes.includes(attachment.mimeType);
+    
+    // Set headers
+    const filename = encodeURIComponent(attachment.originalName || attachment.filename);
+    res.set({
+      'Content-Type': attachment.mimeType || 'application/octet-stream',
+      'Content-Disposition': canDisplayInline ? `inline; filename="${filename}"` : `attachment; filename="${filename}"`,
+      'Content-Length': attachment.size,
+      'Cache-Control': 'private, max-age=3600'
+    });
+    
+    // Send file buffer
+    res.send(attachment.data);
+    
+  } catch (error) {
+    console.error('View file error:', error);
+    res.status(500).json({ 
+      message: 'Failed to view file', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
+  }
+});
+
+/* ===================== GET ATTACHMENT INFO (METADATA ONLY) ===================== */
+router.get('/:ticketId/attachments', authenticate, async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    
+    // Validate ID
+    if (!isValidObjectId(ticketId)) {
+      return res.status(400).json({ message: 'Invalid ticket ID format' });
+    }
+    
+    // Find the ticket
+    const ticket = await Ticket.findById(ticketId).select('attachments createdBy department');
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Check permissions
+    if (req.user.role === 'user' && ticket.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
+    }
+    
+    // Return attachments without file data (just metadata)
+    const attachments = ticket.attachments.map(att => ({
+      _id: att._id,
+      filename: att.filename,
+      originalName: att.originalName,
+      mimeType: att.mimeType,
+      size: att.size,
+      uploadedAt: att.uploadedAt
+    }));
+    
+    res.status(200).json({ attachments });
+    
+  } catch (error) {
+    console.error('Get attachments error:', error);
+    res.status(500).json({ 
+      message: 'Failed to get attachments', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
+  }
+});
+
+/* ===================== DELETE ATTACHMENT ===================== */
+router.delete('/:ticketId/attachment/:attachmentId', authenticate, async (req, res) => {
+  try {
+    const { ticketId, attachmentId } = req.params;
+    
+    // Validate IDs
+    if (!isValidObjectId(ticketId) || !isValidObjectId(attachmentId)) {
+      return res.status(400).json({ message: 'Invalid ID format' });
+    }
+    
+    // Find the ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Check permissions - only ticket creator or admin/superadmin can delete
+    if (req.user.role === 'user' && ticket.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
+    }
+    
+    // Find and remove the attachment
+    const attachment = ticket.attachments.id(attachmentId);
+    if (!attachment) {
+      return res.status(404).json({ message: 'Attachment not found' });
+    }
+    
+    ticket.attachments.pull(attachmentId);
+    await ticket.save();
+    
+    res.status(200).json({ 
+      message: 'Attachment deleted successfully',
+      ticketId,
+      attachmentId
+    });
+    
+  } catch (error) {
+    console.error('Delete attachment error:', error);
+    res.status(500).json({ 
+      message: 'Failed to delete attachment', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
+  }
+});
+
+/* ===================== ADD ATTACHMENTS TO EXISTING TICKET ===================== */
+router.post('/:ticketId/attachments', authenticate, upload.array('attachments', 10), async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    
+    // Validate ID
+    if (!isValidObjectId(ticketId)) {
+      return res.status(400).json({ message: 'Invalid ticket ID format' });
+    }
+    
+    // Find the ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Check permissions
+    if (req.user.role === 'user' && ticket.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
+    }
+    
+    // Check if any files were uploaded
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: 'No files uploaded' });
+    }
+    
+    // Process uploaded files
+    const newAttachments = req.files.map(file => ({
+      filename: `${Date.now()}-${file.originalname}`,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      data: file.buffer,
+      uploadedAt: new Date()
+    }));
+    
+    // Add new attachments to ticket
+    ticket.attachments.push(...newAttachments);
+    await ticket.save();
+    
+    // Get updated attachments without file data
+    const attachments = ticket.attachments.map(att => ({
+      _id: att._id,
+      filename: att.filename,
+      originalName: att.originalName,
+      mimeType: att.mimeType,
+      size: att.size,
+      uploadedAt: att.uploadedAt
+    }));
+    
+    res.status(200).json({
+      message: 'Attachments added successfully',
+      count: newAttachments.length,
+      attachments
+    });
+    
+  } catch (error) {
+    console.error('Add attachments error:', error);
+    
+    // Handle multer errors
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File size too large. Maximum 10MB.' });
+      }
+      return res.status(400).json({ message: error.message });
+    }
+    
+    res.status(500).json({ 
+      message: 'Failed to add attachments', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
+  }
+});
+
 /* ===================== GET ALL TICKETS ===================== */
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -267,18 +552,26 @@ router.get('/', authenticate, async (req, res) => {
 
     const tickets = await Ticket.find(query)
       .populate([
-        { path: 'createdBy', select: 'name email' },
+        { path: 'createdBy', select: 'name email companyName' },
         { path: 'assignedTo', select: 'name email' },
         { path: 'solvedBy', select: 'name email' },
         { path: 'department', select: 'name description categories' },
         { path: 'remarks.addedBy', select: 'name email' }
       ])
+      .select('-attachments.data -adminAttachments.data') // Exclude file data for performance
       .sort({ createdAt: -1 })
       .lean();
 
+    // Add attachment count to each ticket
+    const ticketsWithAttachmentCount = tickets.map(ticket => ({
+      ...ticket,
+      attachmentCount: ticket.attachments?.length || 0,
+      attachments: undefined // Remove attachments array from response
+    }));
+
     console.log(`📊 Found ${tickets.length} tickets for user ${req.user._id}`);
 
-    return res.status(200).json(tickets);
+    return res.status(200).json(ticketsWithAttachmentCount);
 
   } catch (error) {
     console.error('❌ GET TICKETS FAILED:', error);
@@ -298,13 +591,14 @@ router.get('/:id', authenticate, async (req, res) => {
 
     const ticket = await Ticket.findById(req.params.id)
       .populate([
-        { path: 'createdBy', select: 'name email' },
+        { path: 'createdBy', select: 'name email companyName' },
         { path: 'assignedTo', select: 'name email' },
         { path: 'solvedBy', select: 'name email' },
         { path: 'department', select: 'name description categories' },
         { path: 'remarks.addedBy', select: 'name email' },
         { path: 'adminAttachments.uploadedBy', select: 'name email' }
-      ]);
+      ])
+      .select('-attachments.data -adminAttachments.data'); // Exclude file data
 
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found' });
@@ -313,6 +607,13 @@ router.get('/:id', authenticate, async (req, res) => {
     // Check permissions
     if (req.user.role === 'user' && ticket.createdBy._id.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
     }
 
     return res.status(200).json(ticket);
@@ -377,7 +678,8 @@ router.patch('/:id/status', authenticate, authorize('admin', 'superadmin'), asyn
       req.params.id,
       updateData,
       { new: true, runValidators: true }
-    ).populate(['createdBy', 'department', 'solvedBy']);
+    ).populate(['createdBy', 'department', 'solvedBy'])
+     .select('-attachments.data -adminAttachments.data');
 
     // Send email if resolved
     if (status === 'resolved' && ticket.createdBy?.email) {
@@ -435,7 +737,8 @@ router.post('/:id/remarks', authenticate, authorize('admin', 'superadmin'), asyn
       .populate([
         { path: 'createdBy', select: 'name email' },
         { path: 'remarks.addedBy', select: 'name email' }
-      ]);
+      ])
+      .select('-attachments.data -adminAttachments.data');
 
     return res.status(200).json(updatedTicket);
 
@@ -466,7 +769,7 @@ router.get('/dashboard/stats', authenticate, async (req, res) => {
       }
     }
 
-    const tickets = await Ticket.find(query).lean();
+    const tickets = await Ticket.find(query).select('-attachments.data -adminAttachments.data').lean();
 
     const stats = {
       total: tickets.length,
@@ -533,21 +836,6 @@ router.delete('/:id', authenticate, authorize('superadmin'), async (req, res) =>
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
-});
-
-/* ===================== TEST ENDPOINT ===================== */
-router.post('/test', authenticate, (req, res) => {
-  console.log('=== TEST ENDPOINT HIT ===');
-  console.log('User:', req.user._id, req.user.email);
-  console.log('Body:', req.body);
-  console.log('Headers:', req.headers['content-type']);
-  
-  res.status(200).json({
-    message: 'Test successful',
-    user: req.user._id,
-    body: req.body,
-    headers: req.headers
-  });
 });
 
 /* ===================== SUBMIT FEEDBACK ===================== */
@@ -639,6 +927,196 @@ router.get('/:id/feedback', authenticate, async (req, res) => {
     return res.status(500).json({
       message: 'Failed to fetch feedback',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/* ===================== TEST ENDPOINT ===================== */
+router.post('/test', authenticate, (req, res) => {
+  console.log('=== TEST ENDPOINT HIT ===');
+  console.log('User:', req.user._id, req.user.email);
+  console.log('Body:', req.body);
+  console.log('Headers:', req.headers['content-type']);
+  
+  res.status(200).json({
+    message: 'Test successful',
+    user: req.user._id,
+    body: req.body,
+    headers: req.headers
+  });
+});
+
+/* ===================== ADD ADMIN ATTACHMENTS ===================== */
+router.post('/:ticketId/admin-attachments', authenticate, authorize('admin', 'superadmin'), upload.array('attachments', 10), async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    
+    // Validate ID
+    if (!isValidObjectId(ticketId)) {
+      return res.status(400).json({ message: 'Invalid ticket ID format' });
+    }
+    
+    // Find the ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
+    }
+    
+    // Check if any files were uploaded
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: 'No files uploaded' });
+    }
+    
+    // Process uploaded files
+    const newAttachments = req.files.map(file => ({
+      filename: `${Date.now()}-${file.originalname}`,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      data: file.buffer,
+      uploadedBy: req.user._id,
+      uploadedAt: new Date()
+    }));
+    
+    // Add new admin attachments to ticket
+    ticket.adminAttachments.push(...newAttachments);
+    await ticket.save();
+    
+    // Get updated admin attachments without file data
+    const adminAttachments = ticket.adminAttachments.map(att => ({
+      _id: att._id,
+      filename: att.filename,
+      originalName: att.originalName,
+      mimeType: att.mimeType,
+      size: att.size,
+      uploadedBy: att.uploadedBy,
+      uploadedAt: att.uploadedAt
+    }));
+    
+    res.status(200).json({
+      message: 'Admin attachments added successfully',
+      count: newAttachments.length,
+      adminAttachments
+    });
+    
+  } catch (error) {
+    console.error('Add admin attachments error:', error);
+    
+    // Handle multer errors
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File size too large. Maximum 10MB.' });
+      }
+      return res.status(400).json({ message: error.message });
+    }
+    
+    res.status(500).json({ 
+      message: 'Failed to add admin attachments', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
+  }
+});
+
+/* ===================== DOWNLOAD ADMIN ATTACHMENT ===================== */
+router.get('/:ticketId/admin-attachment/:attachmentId', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { ticketId, attachmentId } = req.params;
+    
+    // Validate IDs
+    if (!isValidObjectId(ticketId) || !isValidObjectId(attachmentId)) {
+      return res.status(400).json({ message: 'Invalid ID format' });
+    }
+    
+    // Find the ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Find the admin attachment
+    const attachment = ticket.adminAttachments.id(attachmentId);
+    if (!attachment) {
+      return res.status(404).json({ message: 'Admin attachment not found' });
+    }
+    
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
+    }
+    
+    // Set headers
+    const filename = encodeURIComponent(attachment.originalName || attachment.filename);
+    res.set({
+      'Content-Type': attachment.mimeType || 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': attachment.size,
+      'Cache-Control': 'private, max-age=3600'
+    });
+    
+    // Send file buffer
+    res.send(attachment.data);
+    
+  } catch (error) {
+    console.error('Download admin attachment error:', error);
+    res.status(500).json({ 
+      message: 'Failed to download admin attachment', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
+  }
+});
+
+/* ===================== DELETE ADMIN ATTACHMENT ===================== */
+router.delete('/:ticketId/admin-attachment/:attachmentId', authenticate, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { ticketId, attachmentId } = req.params;
+    
+    // Validate IDs
+    if (!isValidObjectId(ticketId) || !isValidObjectId(attachmentId)) {
+      return res.status(400).json({ message: 'Invalid ID format' });
+    }
+    
+    // Find the ticket
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+    
+    // Check admin department access
+    if (req.user.role === 'admin' && 
+        ticket.department && 
+        req.user.department?._id?.toString() !== ticket.department.toString()) {
+      return res.status(403).json({ message: 'Access denied to this department ticket' });
+    }
+    
+    // Find and remove the admin attachment
+    const attachment = ticket.adminAttachments.id(attachmentId);
+    if (!attachment) {
+      return res.status(404).json({ message: 'Admin attachment not found' });
+    }
+    
+    ticket.adminAttachments.pull(attachmentId);
+    await ticket.save();
+    
+    res.status(200).json({ 
+      message: 'Admin attachment deleted successfully',
+      ticketId,
+      attachmentId
+    });
+    
+  } catch (error) {
+    console.error('Delete admin attachment error:', error);
+    res.status(500).json({ 
+      message: 'Failed to delete admin attachment', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
     });
   }
 });

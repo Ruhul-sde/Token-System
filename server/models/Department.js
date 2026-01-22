@@ -1,50 +1,43 @@
+// models/Department.js
 import mongoose from 'mongoose';
 
-/**
- * Category Schema (Embedded)
- */
-const categorySchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true
-      // ❌ no unique:true here (MongoDB does not support unique in subdocuments properly)
-    },
-    description: {
-      type: String
-    },
-    subCategories: [
-      {
-        type: String
-      }
-    ],
-    createdAt: {
-      type: Date,
-      default: Date.now
-    }
-  },
-  { _id: true }
-);
-
-/**
- * Department Schema
- */
 const departmentSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    unique: true
+    trim: true
   },
   description: {
-    type: String
+    type: String,
+    trim: true
   },
-  categories: [categorySchema],
+  categories: [{
+    type: String,
+    trim: true
+  }],
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
+  },
   createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
     type: Date,
     default: Date.now
   }
 });
 
-const Department = mongoose.model('Department', departmentSchema);
+// Update timestamp on save
+departmentSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
 
-export default Department;
+// Indexes
+departmentSchema.index({ name: 1 });
+departmentSchema.index({ status: 1 });
+
+export default mongoose.model('Department', departmentSchema);

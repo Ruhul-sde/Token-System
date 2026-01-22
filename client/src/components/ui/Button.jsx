@@ -1,18 +1,43 @@
-// components/ui/Button.jsx
 import React from 'react';
-import { THEME } from '../../constants/theme';
 
-const Button = ({ onClick, variant = 'primary', children, className = "", type="button" }) => {
-  const baseClass = "px-6 py-2.5 rounded-xl font-semibold transition-all transform active:scale-95 shadow-lg flex items-center justify-center gap-2";
-  const variants = {
-    primary: `bg-gradient-to-r from-[${THEME.primary}] to-red-700 text-white hover:shadow-red-500/25`,
-    secondary: `bg-gradient-to-r from-[${THEME.secondary}] to-blue-900 text-white hover:shadow-blue-500/25`,
-    ghost: "bg-white/5 hover:bg-white/10 text-white border border-white/10",
-    danger: "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/20"
+const Button = ({
+  children,
+  variant = 'primary',
+  size = 'md',
+  onClick,
+  disabled = false,
+  className = '',
+  type = 'button',
+  fullWidth = false,
+  ...props
+}) => {
+  const baseClasses = 'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed';
+  
+  const variantClasses = {
+    primary: 'bg-gradient-to-r from-[#ED1B2F] to-red-600 text-white hover:from-red-600 hover:to-[#ED1B2F] focus:ring-[#ED1B2F]',
+    secondary: 'bg-white/10 text-white hover:bg-white/20 focus:ring-white/30 border border-white/10',
+    danger: 'bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-700 hover:to-red-600 focus:ring-red-500',
+    ghost: 'bg-transparent text-white/70 hover:text-white hover:bg-white/10 focus:ring-white/20',
+    success: 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-600 focus:ring-emerald-500',
+    warning: 'bg-gradient-to-r from-yellow-600 to-yellow-700 text-white hover:from-yellow-700 hover:to-yellow-600 focus:ring-yellow-500'
   };
 
+  const sizeClasses = {
+    sm: 'px-3 py-2 text-sm',
+    md: 'px-4 py-3 text-sm',
+    lg: 'px-6 py-3 text-base'
+  };
+
+  const widthClass = fullWidth ? 'w-full' : '';
+
   return (
-    <button type={type} onClick={onClick} className={`${baseClass} ${variants[variant]} ${className}`}>
+    <button
+      type={type}
+      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${widthClass} ${className}`}
+      onClick={onClick}
+      disabled={disabled}
+      {...props}
+    >
       {children}
     </button>
   );

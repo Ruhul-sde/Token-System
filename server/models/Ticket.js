@@ -1,7 +1,7 @@
+// models/Ticket.js
 import mongoose from 'mongoose';
 
 const ticketSchema = new mongoose.Schema({
-
   /* ===== IDENTIFIERS ===== */
   ticketNumber: {
     type: String,
@@ -11,7 +11,7 @@ const ticketSchema = new mongoose.Schema({
 
   type: {
     type: String,
-    enum: ['ticket', 'token'],
+    enum: ['ticket'],
     default: 'ticket'
   },
 
@@ -37,7 +37,10 @@ const ticketSchema = new mongoose.Schema({
   /* ===== ATTACHMENTS (COMMON) ===== */
   attachments: [{
     filename: String,
-    url: String,
+    originalName: String,
+    mimeType: String,
+    size: Number,
+    data: Buffer, // Store file data as Buffer
     uploadedAt: {
       type: Date,
       default: Date.now
@@ -47,12 +50,10 @@ const ticketSchema = new mongoose.Schema({
   /* ===== TOKEN-SPECIFIC DOCUMENTS ===== */
   supportingDocuments: [{
     filename: String,
-    fileType: {
-      type: String,
-      enum: ['image', 'pdf']
-    },
-    url: String,
-    base64Data: String,
+    originalName: String,
+    mimeType: String,
+    size: Number,
+    data: Buffer,
     uploadedAt: {
       type: Date,
       default: Date.now
@@ -131,7 +132,10 @@ const ticketSchema = new mongoose.Schema({
   /* ===== ADMIN ATTACHMENTS ===== */
   adminAttachments: [{
     filename: String,
-    url: String,
+    originalName: String,
+    mimeType: String,
+    size: Number,
+    data: Buffer,
     uploadedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'

@@ -1,98 +1,235 @@
 // components/super-admin/tabs/DepartmentsTab.jsx
-import React, { useEffect, useState } from 'react';
-import { useSuperAdmin } from '../../../context/SuperAdminContext';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import Card from '../../ui/Card';
 import Button from '../../ui/Button';
+import Modal from '../../ui/Modal';
+import Badge from '../../ui/Badge';
 import axios from 'axios';
+import {
+  FaBuilding,
+  FaPlus,
+  FaEdit,
+  FaTrash,
+  FaSync,
+  FaLayerGroup,
+  FaTag,
+  FaTimes,
+  FaCheck,
+  FaExclamationCircle
+} from 'react-icons/fa';
 
 const DepartmentsTab = () => {
-  const { 
-    departments, 
-    setDepartments,
-    toggleModal, 
-    setSelections, 
-    setNewDept,
-    fetchData // Make sure this is in context
-  } = useSuperAdmin();
-  
-  const { user } = useAuth();
+  const { API_URL } = useAuth();
+  const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    categories: [] // Simple array of category strings
+  });
+  
+  // Category input state
+  const [newCategory, setNewCategory] = useState('');
 
-  // Function to refresh departments
-  const refreshDepartments = async () => {
-    setLoading(true);
-    setError('');
+  // Fetch departments
+  const fetchDepartments = async () => {
     try {
-      const response = await axios.get('/departments');
-      console.log('Refreshed departments:', response.data.length);
-      setDepartments(response.data);
-    } catch (err) {
-      console.error('Error refreshing departments:', err);
-      setError('Failed to load departments');
+      setLoading(true);
+      setError('');
+      const token = localStorage.getItem('token');
+      const config = { 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      };
+
+      const response = await axios.get(`${API_URL}/departments`, config);
+      
+      // Transform data if needed - ensure categories is an array of strings
+      const departmentsData = Array.isArray(response.data) ? response.data : 
+                             response.data.departments || response.data.data || [];
+      
+      const transformedDepartments = departmentsData.map(dept => ({
+        ...dept,
+        categories: Array.isArray(dept.categories) ? 
+          dept.categories.map(cat => 
+            typeof cat === 'object' ? cat.name || cat.category || 'Unnamed' : cat
+          ) : 
+          []
+      }));
+      
+      setDepartments(transformedDepartments);
+      
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+      setError(error.response?.data?.message || 'Failed to load departments');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Initial load
-    refreshDepartments();
+    fetchDepartments();
   }, []);
 
-  const handleDeleteDepartment = async (departmentId) => {
-    if (window.confirm('Are you sure you want to delete this department? This will also delete all its categories.')) {
-      try {
-        await axios.delete(`/departments/${departmentId}`);
-        await refreshDepartments(); // Refresh after delete
-        alert('Department deleted successfully!');
-      } catch (err) {
-        console.error('Delete error:', err);
-        alert(`Failed to delete department: ${err.response?.data?.message || err.message}`);
+  // Handle form input changes
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle category addition
+  const handleAddCategory = () => {
+    if (newCategory.trim() === '') return;
+    
+    setFormData(prev => ({
+      ...prev,
+      categories: [...prev.categories, newCategory.trim()]
+    }));
+    
+    setNewCategory('');
+  };
+
+  // Handle category removal
+  const handleRemoveCategory = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      categories: prev.categories.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Open create modal
+  const openCreateModal = () => {
+    setFormData({
+      name: '',
+      description: '',
+      categories: []
+    });
+    setNewCategory('');
+    setShowCreateModal(true);
+  };
+
+  // Open edit modal
+  const openEditModal = (department) => {
+    setSelectedDepartment(department);
+    setFormData({
+      name: department.name || '',
+      description: department.description || '',
+      categories: Array.isArray(department.categories) ? department.categories : []
+    });
+    setNewCategory('');
+    setShowEditModal(true);
+  };
+
+  // Create department
+  const handleCreateDepartment = async () => {
+    try {
+      if (!formData.name.trim()) {
+        alert('Department name is required');
+        return;
       }
+
+      const token = localStorage.getItem('token');
+      const config = { 
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        } 
+      };
+
+      const departmentData = {
+        name: formData.name.trim(),
+        description: formData.description.trim() || undefined,
+        categories: formData.categories.length > 0 ? formData.categories : undefined
+      };
+
+      const response = await axios.post(`${API_URL}/departments`, departmentData, config);
+      
+      if (response.data.success || response.data._id) {
+        setShowCreateModal(false);
+        await fetchDepartments();
+        alert('Department created successfully!');
+      } else {
+        throw new Error(response.data.message || 'Failed to create department');
+      }
+
+    } catch (error) {
+      console.error('Error creating department:', error);
+      alert(`Failed to create department: ${error.response?.data?.message || error.message}`);
     }
   };
 
-  const openEditModal = (dept) => {
-    setSelections(prev => ({ ...prev, dept }));
-    setNewDept({ 
-      name: dept.name, 
-      description: dept.description || '', 
-      categories: dept.categories || [] 
-    });
-    toggleModal('dept', true);
-  };
-
-  const openCreateModal = () => {
-    setSelections(prev => ({ ...prev, dept: null }));
-    setNewDept({ name: '', description: '', categories: [] });
-    toggleModal('dept', true);
-  };
-
-  // Function to add a quick category
-  const addQuickCategory = async (departmentId, departmentName) => {
-    const categoryName = prompt(`Enter category name for ${departmentName}:`);
-    if (!categoryName?.trim()) return;
-
+  // Update department
+  const handleUpdateDepartment = async () => {
     try {
-      const response = await axios.post(`/departments/${departmentId}/categories`, {
-        name: categoryName.trim(),
-        description: '',
-        subCategories: []
-      });
-      
-      // Update local state
-      setDepartments(prev => 
-        prev.map(dept => 
-          dept._id === departmentId ? response.data : dept
-        )
+      if (!selectedDepartment || !formData.name.trim()) {
+        alert('Department name is required');
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      const config = { 
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        } 
+      };
+
+      const departmentData = {
+        name: formData.name.trim(),
+        description: formData.description.trim() || undefined,
+        categories: formData.categories.length > 0 ? formData.categories : undefined
+      };
+
+      const response = await axios.put(
+        `${API_URL}/departments/${selectedDepartment._id}`, 
+        departmentData, 
+        config
       );
       
-      alert(`✅ Category "${categoryName}" added successfully!`);
-    } catch (err) {
-      console.error('Add category error:', err);
-      alert(`❌ Failed to add category: ${err.response?.data?.message || err.message}`);
+      if (response.data.success || response.data._id) {
+        setShowEditModal(false);
+        await fetchDepartments();
+        alert('Department updated successfully!');
+      } else {
+        throw new Error(response.data.message || 'Failed to update department');
+      }
+
+    } catch (error) {
+      console.error('Error updating department:', error);
+      alert(`Failed to update department: ${error.response?.data?.message || error.message}`);
+    }
+  };
+
+  // Delete department
+  const handleDeleteDepartment = async (departmentId) => {
+    if (!window.confirm('Are you sure you want to delete this department? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const config = { 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      };
+
+      await axios.delete(`${API_URL}/departments/${departmentId}`, config);
+      await fetchDepartments();
+      alert('Department deleted successfully!');
+
+    } catch (error) {
+      console.error('Error deleting department:', error);
+      alert(`Failed to delete department: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -101,171 +238,404 @@ const DepartmentsTab = () => {
     acc + (dept.categories?.length || 0), 0
   );
   
-  const maxCategories = departments.length > 0 
-    ? Math.max(...departments.map(dept => dept.categories?.length || 0))
-    : 0;
-  
   const deptsWithCategories = departments.filter(dept => 
     dept.categories?.length > 0
   ).length;
 
-  return (
-    <Card>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <h3 className="text-2xl font-bold text-white">Departments</h3>
-          <p className="text-white/60">Manage departments and their categories</p>
+  if (loading && departments.length === 0) {
+    return (
+      <Card className="overflow-hidden">
+        <div className="flex flex-col items-center justify-center h-96">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#ED1B2F] mb-6"></div>
+          <p className="text-white text-lg mb-2">Loading departments...</p>
         </div>
-        <div className="flex gap-3">
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div>
+          <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+            <FaBuilding className="text-[#ED1B2F]" />
+            Departments Management
+          </h3>
+          <p className="text-sm text-white/60 mt-1">
+            {departments.length} departments • {totalCategories} categories
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
           <Button 
-            variant="ghost" 
-            onClick={refreshDepartments}
+            variant="primary" 
+            onClick={openCreateModal}
+            className="flex items-center gap-2"
+          >
+            <FaPlus />
+            Add Department
+          </Button>
+          <Button 
+            variant="secondary" 
+            onClick={fetchDepartments}
+            className="flex items-center gap-2"
             disabled={loading}
           >
-            {loading ? 'Refreshing...' : '🔄 Refresh'}
-          </Button>
-          <Button onClick={openCreateModal}>
-            + Add Department
+            <FaSync className={loading ? 'animate-spin' : ''} />
+            Refresh
           </Button>
         </div>
       </div>
 
       {error && (
         <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl">
-          <p className="text-red-300">{error}</p>
+          <div className="flex items-center gap-2">
+            <FaExclamationCircle className="text-red-400" />
+            <p className="text-red-300">{error}</p>
+          </div>
         </div>
       )}
 
-      {loading && !error ? (
-        <div className="text-center py-10">
-          <div className="w-12 h-12 border-4 border-[#ED1B2F] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white/60">Loading departments...</p>
-        </div>
-      ) : departments.length === 0 ? (
-        <div className="text-center text-white/40 py-10">
-          <div className="text-6xl mb-4">🏢</div>
-          <h4 className="text-xl font-bold mb-2">No Departments Found</h4>
-          <p className="mb-6">Create your first department to get started!</p>
-          <Button onClick={openCreateModal}>Create First Department</Button>
-        </div>
-      ) : (
-        <>
-          {/* Departments Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {departments.map(dept => (
-              <div 
-                key={dept._id} 
-                className="bg-white/5 p-6 rounded-xl border border-white/10 hover:border-[#ED1B2F] transition-all group"
-              >
-                <div className="flex justify-between items-start mb-3">
+      {/* Departments Grid */}
+      {departments.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {departments.map(dept => (
+            <div 
+              key={dept._id} 
+              className="bg-white/5 p-6 rounded-xl border border-white/10 hover:border-[#ED1B2F] transition-all group"
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div>
                   <h4 className="text-xl font-bold group-hover:text-[#ED1B2F] transition-colors">
                     {dept.name}
                   </h4>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs bg-[#ED1B2F]/20 text-[#ED1B2F] px-2 py-1 rounded-full">
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge color="blue">
                       {dept.categories?.length || 0} categories
+                    </Badge>
+                    <span className="text-xs text-white/40">
+                      ID: {dept._id?.slice(-6)}
                     </span>
                   </div>
                 </div>
-                
-                <p className="text-white/60 text-sm mb-4 min-h-[3rem]">
-                  {dept.description || 'No description provided.'}
-                </p>
-                
-                {/* Categories Display */}
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => openEditModal(dept)}
+                    className="text-blue-400 hover:text-blue-300 transition-colors"
+                    title="Edit department"
+                  >
+                    <FaEdit />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteDepartment(dept._id)}
+                    className="text-red-400 hover:text-red-300 transition-colors"
+                    title="Delete department"
+                  >
+                    <FaTrash />
+                  </button>
+                </div>
+              </div>
+              
+              <p className="text-white/60 text-sm mb-4 min-h-[3rem]">
+                {dept.description || 'No description provided.'}
+              </p>
+              
+              {/* Categories Display */}
+              {dept.categories && dept.categories.length > 0 ? (
                 <div className="mb-4">
-                  <div className="text-xs text-white/40 mb-2">Categories:</div>
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {dept.categories?.slice(0, 3).map((cat, i) => (
+                  <div className="text-sm text-white/70 mb-2 flex items-center gap-2">
+                    <FaTag />
+                    Categories
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {dept.categories.slice(0, 5).map((cat, index) => (
                       <span 
-                        key={cat._id || i} 
-                        className="text-xs bg-[#455185]/30 px-2 py-1 rounded text-white/80 border border-[#455185] truncate max-w-[120px]"
-                        title={cat.description || cat.name}
+                        key={index} 
+                        className="text-xs bg-[#455185]/30 px-3 py-1 rounded-full text-white/80 border border-[#455185]"
                       >
-                        {cat.name}
+                        {cat}
                       </span>
                     ))}
-                    {dept.categories?.length > 3 && (
+                    {dept.categories.length > 5 && (
                       <span className="text-xs text-white/50 px-2 py-1">
-                        +{dept.categories.length - 3} more
-                      </span>
-                    )}
-                    {(!dept.categories || dept.categories.length === 0) && (
-                      <span className="text-xs text-white/30 italic">
-                        No categories
+                        +{dept.categories.length - 5} more
                       </span>
                     )}
                   </div>
-                  
-                  {/* Quick Actions */}
-                  <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={() => addQuickCategory(dept._id, dept.name)}
-                      className="text-xs text-[#455185] hover:text-white transition-colors"
-                    >
-                      + Add Category
-                    </button>
-                  </div>
                 </div>
-                
-                <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/10">
-                  <div className="text-xs text-white/40">
-                    {dept.createdAt ? new Date(dept.createdAt).toLocaleDateString() : 'N/A'}
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => openEditModal(dept)}
-                      className="text-[#455185] font-bold hover:text-white transition-colors text-sm"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteDepartment(dept._id)}
-                      className="text-[#ED1B2F] hover:text-red-400 transition-colors text-sm"
-                    >
-                      Delete
-                    </button>
-                  </div>
+              ) : (
+                <div className="mb-4 p-3 bg-white/5 rounded-lg text-center">
+                  <p className="text-white/40 text-sm">
+                    No categories defined
+                  </p>
                 </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Department Stats */}
-          <div className="mt-8 pt-6 border-t border-white/10">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center bg-white/5 p-4 rounded-lg">
-                <div className="text-2xl font-bold text-white">
-                  {departments.length}
-                </div>
-                <div className="text-sm text-white/60">Total Departments</div>
-              </div>
+              )}
               
-              <div className="text-center bg-white/5 p-4 rounded-lg">
-                <div className="text-2xl font-bold text-emerald-400">
-                  {totalCategories}
+              <div className="text-xs text-white/40 mt-4 pt-4 border-t border-white/10">
+                <div className="flex items-center gap-2">
+                  <FaLayerGroup />
+                  Created: {dept.createdAt ? new Date(dept.createdAt).toLocaleDateString() : 'N/A'}
                 </div>
-                <div className="text-sm text-white/60">Total Categories</div>
-              </div>
-              
-              <div className="text-center bg-white/5 p-4 rounded-lg">
-                <div className="text-2xl font-bold text-blue-400">
-                  {maxCategories}
-                </div>
-                <div className="text-sm text-white/60">Max Categories</div>
-              </div>
-              
-              <div className="text-center bg-white/5 p-4 rounded-lg">
-                <div className="text-2xl font-bold text-yellow-400">
-                  {deptsWithCategories}
-                </div>
-                <div className="text-sm text-white/60">Departments with Categories</div>
               </div>
             </div>
-          </div>
-        </>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center text-white/40 py-16">
+          <div className="text-6xl mb-4">🏢</div>
+          <p className="text-xl mb-2">No departments found</p>
+          <p className="text-white/60 mb-4">
+            Departments are needed for ticket categorization
+          </p>
+          <Button 
+            variant="primary" 
+            onClick={openCreateModal}
+          >
+            <FaPlus className="mr-2" />
+            Create First Department
+          </Button>
+        </div>
       )}
+
+      {/* Stats Cards */}
+      {departments.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-8 border-t border-white/10">
+          <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
+            <div className="text-2xl font-bold text-white">{departments.length}</div>
+            <div className="text-sm text-white/60">Total Departments</div>
+          </div>
+          
+          <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
+            <div className="text-2xl font-bold text-emerald-400">{totalCategories}</div>
+            <div className="text-sm text-white/60">Total Categories</div>
+          </div>
+          
+          <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
+            <div className="text-2xl font-bold text-blue-400">
+              {deptsWithCategories}
+            </div>
+            <div className="text-sm text-white/60">Depts with Categories</div>
+          </div>
+          
+          <div className="bg-white/5 rounded-xl p-4 hover:bg-white/10 transition-colors">
+            <div className="text-2xl font-bold text-yellow-400">
+              {departments.length > 0 ? Math.round(totalCategories / departments.length) : 0}
+            </div>
+            <div className="text-sm text-white/60">Avg Categories per Dept</div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Department Modal */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Create New Department"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              Department Name *
+            </label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+              placeholder="e.g., IT Support, Sales, HR"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              Description (Optional)
+            </label>
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleInputChange}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent min-h-[80px]"
+              placeholder="Brief description of the department's purpose"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              Categories (Optional)
+            </label>
+            <div className="space-y-3">
+              {/* Category Input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCategory())}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                  placeholder="Enter category name"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleAddCategory}
+                  disabled={!newCategory.trim()}
+                >
+                  <FaPlus />
+                </Button>
+              </div>
+
+              {/* Categories List */}
+              {formData.categories.length > 0 && (
+                <div className="bg-white/5 rounded-lg p-3">
+                  <div className="text-sm text-white/70 mb-2">Added Categories:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.categories.map((category, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-center gap-2 bg-[#455185]/30 px-3 py-1 rounded-full"
+                      >
+                        <span className="text-white/90 text-sm">{category}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCategory(index)}
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <FaTimes size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-white/40 mt-2">
+              Categories will be available when creating tickets for this department
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <Button
+            variant="ghost"
+            onClick={() => setShowCreateModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleCreateDepartment}
+            disabled={!formData.name.trim()}
+          >
+            Create Department
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Edit Department Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title={`Edit Department: ${selectedDepartment?.name}`}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              Department Name *
+            </label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              Description
+            </label>
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleInputChange}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent min-h-[80px]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-2">
+              Categories
+            </label>
+            <div className="space-y-3">
+              {/* Category Input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCategory())}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#ED1B2F] focus:border-transparent"
+                  placeholder="Add new category"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleAddCategory}
+                  disabled={!newCategory.trim()}
+                >
+                  <FaPlus />
+                </Button>
+              </div>
+
+              {/* Categories List */}
+              {formData.categories.length > 0 && (
+                <div className="bg-white/5 rounded-lg p-3">
+                  <div className="text-sm text-white/70 mb-2">Categories:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.categories.map((category, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-center gap-2 bg-[#455185]/30 px-3 py-1 rounded-full"
+                      >
+                        <span className="text-white/90 text-sm">{category}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCategory(index)}
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <FaTimes size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <Button
+            variant="ghost"
+            onClick={() => setShowEditModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleUpdateDepartment}
+            disabled={!formData.name.trim()}
+          >
+            Update Department
+          </Button>
+        </div>
+      </Modal>
     </Card>
   );
 };

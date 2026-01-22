@@ -1,203 +1,159 @@
+// routes/departments.js
 import express from 'express';
 import Department from '../models/Department.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
 
-/**
- * =========================
- * GET ALL DEPARTMENTS
- * =========================
- */
-router.get('/', authenticate, async (req, res) => {
+// GET all departments
+router.get('/', authenticate, authorize('superadmin'), async (req, res) => {
   try {
-    let query = {};
-
-    // Admin sees only their department
-    if (req.user.role === 'admin' && req.user.department) {
-      query._id = req.user.department;
-    }
-
-    const departments = await Department.find(query);
-    res.json(departments);
+    const departments = await Department.find().sort({ name: 1 });
+    res.json({
+      success: true,
+      departments
+    });
   } catch (error) {
     console.error('Error fetching departments:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch departments',
+      error: error.message
+    });
   }
 });
 
-/**
- * =========================
- * CREATE DEPARTMENT
- * (superadmin only)
- * =========================
- */
+// GET single department
+router.get('/:id', authenticate, authorize('superadmin'), async (req, res) => {
+  try {
+    const department = await Department.findById(req.params.id);
+    if (!department) {
+      return res.status(404).json({
+        success: false,
+        message: 'Department not found'
+      });
+    }
+    res.json({
+      success: true,
+      department
+    });
+  } catch (error) {
+    console.error('Error fetching department:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch department',
+      error: error.message
+    });
+  }
+});
+
+// CREATE department
 router.post('/', authenticate, authorize('superadmin'), async (req, res) => {
   try {
-    const { name, description } = req.body;
-
-    const department = new Department({
-      name,
-      description,
-      categories: []
+    const { name, description, categories } = req.body;
+    
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Department name is required'
+      });
+    }
+    
+    // Check if department already exists
+    const existingDept = await Department.findOne({ 
+      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } 
     });
-
+    
+    if (existingDept) {
+      return res.status(400).json({
+        success: false,
+        message: 'Department with this name already exists'
+      });
+    }
+    
+    const department = new Department({
+      name: name.trim(),
+      description: description?.trim(),
+      categories: Array.isArray(categories) ? categories : []
+    });
+    
     await department.save();
-    res.status(201).json(department);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Department created successfully',
+      department
+    });
   } catch (error) {
     console.error('Error creating department:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create department',
+      error: error.message
+    });
   }
 });
 
-/**
- * =========================
- * UPDATE DEPARTMENT
- * =========================
- */
-router.patch('/:id', authenticate, authorize('superadmin'), async (req, res) => {
+// UPDATE department
+router.put('/:id', authenticate, authorize('superadmin'), async (req, res) => {
   try {
-    const { name, description } = req.body;
-
-    const department = await Department.findByIdAndUpdate(
-      req.params.id,
-      { name, description },
-      { new: true }
-    );
-
+    const { name, description, categories } = req.body;
+    
+    const department = await Department.findById(req.params.id);
     if (!department) {
-      return res.status(404).json({ message: 'Department not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Department not found'
+      });
     }
-
-    res.json(department);
+    
+    // Update fields
+    if (name !== undefined) department.name = name.trim();
+    if (description !== undefined) department.description = description?.trim();
+    if (categories !== undefined) {
+      department.categories = Array.isArray(categories) ? categories : [];
+    }
+    
+    await department.save();
+    
+    res.json({
+      success: true,
+      message: 'Department updated successfully',
+      department
+    });
   } catch (error) {
     console.error('Error updating department:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update department',
+      error: error.message
+    });
   }
 });
 
-/**
- * =========================
- * ADD CATEGORY TO DEPARTMENT
- * =========================
- */
-router.post(
-  '/:departmentId/categories',
-  authenticate,
-  authorize('superadmin'),
-  async (req, res) => {
-    try {
-      const { name, description, subCategories } = req.body;
-
-      const department = await Department.findById(req.params.departmentId);
-      if (!department) {
-        return res.status(404).json({ message: 'Department not found' });
-      }
-
-      // Prevent duplicate category name per department
-      const exists = department.categories.some(
-        c => c.name.toLowerCase() === name.toLowerCase()
-      );
-
-      if (exists) {
-        return res.status(400).json({ message: 'Category already exists' });
-      }
-
-      department.categories.push({
-        name,
-        description,
-        subCategories
-      });
-
-      await department.save();
-      res.status(201).json(department);
-    } catch (error) {
-      console.error('Error adding category:', error);
-      res.status(500).json({ message: error.message });
-    }
-  }
-);
-
-/**
- * =========================
- * UPDATE CATEGORY
- * =========================
- */
-router.patch(
-  '/:departmentId/categories/:categoryId',
-  authenticate,
-  authorize('superadmin'),
-  async (req, res) => {
-    try {
-      const { name, description, subCategories } = req.body;
-
-      const department = await Department.findById(req.params.departmentId);
-      if (!department) {
-        return res.status(404).json({ message: 'Department not found' });
-      }
-
-      const category = department.categories.id(req.params.categoryId);
-      if (!category) {
-        return res.status(404).json({ message: 'Category not found' });
-      }
-
-      if (name) category.name = name;
-      if (description) category.description = description;
-      if (subCategories) category.subCategories = subCategories;
-
-      await department.save();
-      res.json(department);
-    } catch (error) {
-      console.error('Error updating category:', error);
-      res.status(500).json({ message: error.message });
-    }
-  }
-);
-
-/**
- * =========================
- * DELETE CATEGORY
- * =========================
- */
-router.delete(
-  '/:departmentId/categories/:categoryId',
-  authenticate,
-  authorize('superadmin'),
-  async (req, res) => {
-    try {
-      const department = await Department.findById(req.params.departmentId);
-      if (!department) {
-        return res.status(404).json({ message: 'Department not found' });
-      }
-
-      department.categories = department.categories.filter(
-        c => c._id.toString() !== req.params.categoryId
-      );
-
-      await department.save();
-      res.json(department);
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      res.status(500).json({ message: error.message });
-    }
-  }
-);
-
-/**
- * =========================
- * DELETE DEPARTMENT
- * =========================
- */
+// DELETE department
 router.delete('/:id', authenticate, authorize('superadmin'), async (req, res) => {
   try {
     const department = await Department.findByIdAndDelete(req.params.id);
+    
     if (!department) {
-      return res.status(404).json({ message: 'Department not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Department not found'
+      });
     }
-    res.json({ message: 'Department deleted successfully' });
+    
+    res.json({
+      success: true,
+      message: 'Department deleted successfully'
+    });
   } catch (error) {
     console.error('Error deleting department:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete department',
+      error: error.message
+    });
   }
 });
 
